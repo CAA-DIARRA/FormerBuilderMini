@@ -1,11 +1,11 @@
-import NextAuth, { NextAuthOptions } from "next-auth";
+import NextAuth, { type NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaClient } from "@prisma/client";
 import { compare } from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-export const authOptions: NextAuthOptions = {
+const authOptions: NextAuthOptions = {
   providers: [
     Credentials({
       name: "Credentials",
@@ -15,12 +15,16 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
-        const user = await prisma.user.findUnique({ where: { email: credentials.email } });
+
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email },
+        });
+
         if (!user?.passwordHash) return null;
+
         const ok = await compare(credentials.password, user.passwordHash);
         if (!ok) return null;
 
-        // NextAuth attend un objet "User" serialisable
         return {
           id: user.id,
           email: user.email,
@@ -31,10 +35,11 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   session: { strategy: "jwt" },
-  pages: { signIn: "/login" }, // si tu as une page /login, sinon supprime cette ligne
+  // pages: { signIn: "/login" }, // ⚠️ supprime si tu n’as pas de page /login
 };
 
+// 👉 Crée le handler NextAuth
 const handler = NextAuth(authOptions);
 
-// 👉 Très important: n’exporter QUE les handlers GET/POST
+// 👉 Et exporte seulement les handlers GET et POST
 export { handler as GET, handler as POST };
