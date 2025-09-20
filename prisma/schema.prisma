@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String?
+  image        String?
+  forms        Form[]
+  createdAt    DateTime @default(now())
+}
+
+model Form {
+  id          String     @id @default(cuid())
+  ownerId     String
+  owner       User       @relation(fields: [ownerId], references: [id])
+  title       String
+  trainerName String
+  sessionDate DateTime
+  location    String
+  slug        String     @unique
+  isOpen      Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  responses   Response[]
+}
+
+enum Satisfaction {
+  OUI
+  PARTIELLEMENT
+  NON
+}
+
+model Response {
+  id          String   @id @default(cuid())
+  formId      String
+  form        Form     @relation(fields: [formId], references: [id])
+  submittedAt DateTime @default(now())
+
+  participantNom        String?
+  participantPrenoms    String?
+  participantFonction   String?
+  participantEntreprise String?
+
+  envAccueil       Int?
+  envLieu          Int?
+  envMateriel      Int?
+  envAmeliorations String?
+
+  contAttentes       Int?
+  contUtiliteTravail Int?
+  contExercices      Int?
+  contMethodologie   Int?
+  contSupports       Int?
+  contRythme         Int?
+  contGlobal         Int?
+
+  formMaitrise      Int?
+  formCommunication Int?
+  formClarte        Int?
+  formMethodo       Int?
+  formGlobal        Int?
+
+  reponduAttentes           Satisfaction?
+  formationsComplementaires String?
+  temoignage                String?
+  consentementTemoignage    Boolean?
+
+  userAgent String?
+  ipHash    String?
+}

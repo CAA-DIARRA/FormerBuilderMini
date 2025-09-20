@@ -1,0 +1,42 @@
+
+
+services:
+  db:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: formbuilder
+      POSTGRES_PASSWORD: formbuilder
+      POSTGRES_DB: formbuilder
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U formbuilder"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build: .
+    restart: unless-stopped
+    # En dev : hot-reload Next.js + migrations Prisma
+    command: sh -c "npx prisma migrate deploy && npm run dev"
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      # Force la base à pointer vers le conteneur Postgres
+      DATABASE_URL: postgresql://formbuilder:formbuilder@db:5432/formbuilder
+      NEXT_PUBLIC_BASE_URL: http://localhost:3000
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+
+volumes:
+  pgdata:
