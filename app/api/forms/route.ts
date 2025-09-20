@@ -12,7 +12,7 @@ const Body = z.object({
   location: z.string().min(2),
 });
 
-// Assure un owner par défaut en mode test
+// crée un owner par défaut si la table est vide (pratique en test)
 async function ensureDefaultOwner() {
   const DEFAULT_EMAIL = process.env.SEED_EMAIL || "admin@example.com";
   let owner = await prisma.user.findFirst();
@@ -48,19 +48,16 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ form }, { status: 201 });
 }
 
-export async function GET(req: NextRequest) {
-  // Pas de params ici : on liste simplement tous les formulaires (pour le dashboard en mode test)
+export async function GET(_: NextRequest) {
   const forms = await prisma.form.findMany({
     orderBy: { createdAt: "desc" },
     select: { id: true, title: true, createdAt: true, slug: true, isOpen: true },
   });
-
   const withCounts = await Promise.all(
     forms.map(async (f) => ({
       ...f,
       responses: await prisma.response.count({ where: { formId: f.id } }),
     }))
   );
-
   return NextResponse.json({ forms: withCounts });
 }
