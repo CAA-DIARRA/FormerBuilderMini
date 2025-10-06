@@ -1,19 +1,78 @@
 "use client";
 import { useState } from "react";
 
-// Valeurs enregistrées inchangées (4,3,2,1)
-const likert = [4, 3, 2, 1] as const;
+// En-têtes visibles au-dessus des colonnes (desktop)
+const ScaleHeader = () => (
+  <div className="hidden md:grid grid-cols-5 gap-2 text-xs text-neutral-600 mb-2">
+    <div />{/* colonne du libellé */}
+    <div className="text-center">Très bien (4)</div>
+    <div className="text-center">Bien (3)</div>
+    <div className="text-center">Passable (2)</div>
+    <div className="text-center">Mauvais (1)</div>
+  </div>
+);
 
-// En-têtes visibles au-dessus des colonnes
-const scaleHeaders = ["Très bien (4)", "Bien (3)", "Passable (2)", "Mauvais (1)"];
+// Une ligne question + radios alignées sous les bonnes colonnes
+function RadioRow({
+  label,
+  name,
+  value,
+  onChange,
+}: {
+  label: string;
+  name: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-5 items-center gap-3 py-1">
+      {/* Libellé (colonne 1) */}
+      <div className="md:col-span-1">{label}</div>
 
-// Libellés d’options (affichés sur mobile)
-const scaleOptions = [
-  { value: 4, label: "Très bien (4)" },
-  { value: 3, label: "Bien (3)" },
-  { value: 2, label: "Passable (2)" },
-  { value: 1, label: "Mauvais (1)" },
-] as const;
+      {/* Colonnes 4,3,2,1 */}
+      {[4, 3, 2, 1].map((v) => (
+        <div
+          key={v}
+          className="flex items-center justify-start md:justify-center gap-2"
+        >
+          <input
+            type="radio"
+            name={name}
+            checked={value === v}
+            onChange={() => onChange(v)}
+            className="accent-black"
+            aria-label={
+              v === 4
+                ? "Très bien (4)"
+                : v === 3
+                ? "Bien (3)"
+                : v === 2
+                ? "Passable (2)"
+                : "Mauvais (1)"
+            }
+          />
+          {/* En mobile on montre le libellé à côté de la radio */}
+          <span className="text-xs md:hidden">
+            {v === 4
+              ? "Très bien (4)"
+              : v === 3
+              ? "Bien (3)"
+              : v === 2
+              ? "Passable (2)"
+              : "Mauvais (1)"}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const Section = ({ title, children }: any) => (
+  <section className="border rounded-2xl p-4 space-y-3 bg-white">
+    <h2 className="text-lg font-semibold">{title}</h2>
+    {children}
+  </section>
+);
 
 export default function FormClient({ form }: { form: any }) {
   const [loading, setLoading] = useState(false);
@@ -55,52 +114,6 @@ export default function FormClient({ form }: { form: any }) {
     alert("Merci pour votre retour !");
   };
 
-  const Section = ({ title, children }: any) => (
-    <section className="border rounded-2xl p-4 space-y-3 bg-white">
-      <h2 className="text-lg font-semibold">{title}</h2>
-      {children}
-    </section>
-  );
-
-  // Ligne avec entêtes d’échelle au-dessus + rangée de radios
-  const RadioRow = ({ label, name }: { label: string; name: string }) => (
-    <div className="grid grid-cols-2 md:grid-cols-6 items-center gap-2">
-      {/* Libellé de la question */}
-      <div className="col-span-2 md:col-span-2">{label}</div>
-
-      {/* En-têtes d’échelle (desktop) */}
-      {scaleHeaders.map((h) => (
-        <div
-          key={h}
-          className="hidden md:block text-center text-xs text-neutral-600"
-        >
-          {h}
-        </div>
-      ))}
-
-      {/* Rangée de choix (mobile + desktop) */}
-      <div className="col-span-2 md:col-span-4 flex justify-between md:justify-around">
-        {scaleOptions.map((opt) => (
-          <label key={opt.value} className="inline-flex items-center gap-2">
-            <input
-              type="radio"
-              name={name}
-              value={opt.value}
-              checked={vals[name] === opt.value}
-              onChange={() =>
-                setVals((s: any) => ({ ...s, [name]: opt.value }))
-              }
-              className="accent-black"
-              aria-label={opt.label}
-            />
-            {/* Sur mobile on affiche le texte, sur desktop on s'appuie sur les en-têtes */}
-            <span className="text-xs md:hidden">{opt.label}</span>
-          </label>
-        ))}
-      </div>
-    </div>
-  );
-
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-6">
       <header className="space-y-1">
@@ -128,7 +141,10 @@ export default function FormClient({ form }: { form: any }) {
             placeholder="Prénoms"
             value={vals.participantPrenoms}
             onChange={(e) =>
-              setVals((s: any) => ({ ...s, participantPrenoms: e.target.value }))
+              setVals((s: any) => ({
+                ...s,
+                participantPrenoms: e.target.value,
+              }))
             }
           />
           <input
@@ -156,80 +172,125 @@ export default function FormClient({ form }: { form: any }) {
         </div>
       </Section>
 
-      {/* I. Lenvironnement de la formation */}
-      <Section title="I. Lenvironnement de la formation">
+      {/* I. L’environnement de la formation */}
+      <Section title="I. L’environnement de la formation">
+        <ScaleHeader />
         <RadioRow
-          label="1. Comment avez-vous trouvé l'Acceuil ?"
+          label="1. Comment avez-vous trouvé l’Accueil ?"
           name="envAccueil"
+          value={vals.envAccueil}
+          onChange={(v) => setVals((s: any) => ({ ...s, envAccueil: v }))}
         />
         <RadioRow
-          label="2. comment avez-vous trouvé le(s) Lieu(x) de formation ?"
+          label="2. Comment avez-vous trouvé le(s) lieu(x) de formation ?"
           name="envLieu"
+          value={vals.envLieu}
+          onChange={(v) => setVals((s: any) => ({ ...s, envLieu: v }))}
         />
         <RadioRow
-          label="3. Comment avez-vous trouvé le Materiel mise à disposition ?"
+          label="3. Comment avez-vous trouvé le matériel mis à disposition ?"
           name="envMateriel"
+          value={vals.envMateriel}
+          onChange={(v) => setVals((s: any) => ({ ...s, envMateriel: v }))}
         />
         <textarea
           className="w-full border rounded-xl p-2"
-          placeholder="Vos propositions d'amélioration"
+          placeholder="Vos propositions d’amélioration"
           value={vals.envAmeliorations}
           onChange={(e) =>
-            setVals((s: any) => ({ ...s, envAmeliorations: e.target.value }))
+            setVals((s: any) => ({
+              ...s,
+              envAmeliorations: e.target.value,
+            }))
           }
         />
       </Section>
 
-      {/* II. Le Contenu de la formation */}
-      <Section title="II. Le Contenu de la formation">
+      {/* II. Le contenu de la formation */}
+      <Section title="II. Le contenu de la formation">
+        <ScaleHeader />
         <RadioRow
-          label="1. Le contenu couvre t-il vos attentes ?"
+          label="1. Le contenu couvre-t-il vos attentes ?"
           name="contAttentes"
+          value={vals.contAttentes}
+          onChange={(v) => setVals((s: any) => ({ ...s, contAttentes: v }))}
         />
         <RadioRow
           label="2. Le contenu est-il utile pour votre travail ?"
           name="contUtiliteTravail"
+          value={vals.contUtiliteTravail}
+          onChange={(v) =>
+            setVals((s: any) => ({ ...s, contUtiliteTravail: v }))
+          }
         />
         <RadioRow
           label="3. Comment avez-vous trouvé les exercices / exemples / vidéos ?"
           name="contExercices"
+          value={vals.contExercices}
+          onChange={(v) => setVals((s: any) => ({ ...s, contExercices: v }))}
         />
         <RadioRow
           label="4. Comment avez-vous trouvé la méthodologie utilisée pour la formation ?"
           name="contMethodologie"
+          value={vals.contMethodologie}
+          onChange={(v) =>
+            setVals((s: any) => ({ ...s, contMethodologie: v }))
+          }
         />
         <RadioRow
           label="5. Comment avez-vous trouvé les supports de la formation ?"
           name="contSupports"
+          value={vals.contSupports}
+          onChange={(v) => setVals((s: any) => ({ ...s, contSupports: v }))}
         />
         <RadioRow
           label="6. Comment avez-vous trouvé le rythme de la formation ?"
           name="contRythme"
+          value={vals.contRythme}
+          onChange={(v) => setVals((s: any) => ({ ...s, contRythme: v }))}
         />
         <RadioRow
-          label="Évaluation globale de la formation"
+          label="7. Évaluation globale de la formation"
           name="contGlobal"
+          value={vals.contGlobal}
+          onChange={(v) => setVals((s: any) => ({ ...s, contGlobal: v }))}
         />
       </Section>
 
-      {/* III. Le(s) Formateur(s) */}
-      <Section title="Le(s) Formateur(s)">
-        <RadioRow label="1. Maîtrise du sujet" name="formMaitrise" />
+      {/* III. Le(s) formateur(s) */}
+      <Section title="III. Le(s) formateur(s)">
+        <ScaleHeader />
+        <RadioRow
+          label="1. Maîtrise du sujet"
+          name="formMaitrise"
+          value={vals.formMaitrise}
+          onChange={(v) => setVals((s: any) => ({ ...s, formMaitrise: v }))}
+        />
         <RadioRow
           label="2. Qualité de communication"
           name="formCommunication"
+          value={vals.formCommunication}
+          onChange={(v) =>
+            setVals((s: any) => ({ ...s, formCommunication: v }))
+          }
         />
         <RadioRow
           label="3. Clarté des réponses aux questions"
           name="formClarte"
+          value={vals.formClarte}
+          onChange={(v) => setVals((s: any) => ({ ...s, formClarte: v }))}
         />
         <RadioRow
-          label="4. Maîtrise méthodologie de la formation"
+          label="4. Maîtrise de la méthodologie de la formation"
           name="formMethodo"
+          value={vals.formMethodo}
+          onChange={(v) => setVals((s: any) => ({ ...s, formMethodo: v }))}
         />
         <RadioRow
           label="5. Évaluation globale du formateur"
           name="formGlobal"
+          value={vals.formGlobal}
+          onChange={(v) => setVals((s: any) => ({ ...s, formGlobal: v }))}
         />
       </Section>
 
@@ -287,7 +348,7 @@ export default function FormClient({ form }: { form: any }) {
             }
             className="accent-black"
           />
-          <span>J'autorise la publication de mon témoignage</span>
+          <span>J’autorise la publication de mon témoignage</span>
         </label>
       </Section>
 
