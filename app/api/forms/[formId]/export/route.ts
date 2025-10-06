@@ -145,7 +145,6 @@ export async function GET(
   ]);
 
   // ========= FEUILLE 2 : GRAPHIQUE =========
-  // Mapping des 5 barres (comme ta capture)
   const qualiteContenu = contGlobal;
   const qualiteAnimation =
     formGlobal ??
@@ -233,8 +232,15 @@ export async function GET(
     );
   }
 
+  // --- INSERTION IMAGE EN BASE64 (corrige l’erreur de Buffer) ---
   const chartArrayBuf = await qcResp.arrayBuffer();
-  const chartBuffer = Buffer.from(chartArrayBuf);
+  let binary = "";
+  const bytes = new Uint8Array(chartArrayBuf);
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+  const chartBase64 =
+    typeof btoa === "function"
+      ? btoa(binary)
+      : Buffer.from(binary, "binary").toString("base64");
 
   const wsChart = wb.addWorksheet("GRAPHIQUE");
   wsChart.columns = Array.from({ length: 12 }).map((_, i) => ({
@@ -248,7 +254,7 @@ export async function GET(
   wsChart.mergeCells(chartTitle.number, 1, chartTitle.number, 12);
   chartTitle.font = { bold: true, size: 13 };
 
-  const imageId = wb.addImage({ buffer: chartBuffer, extension: "png" });
+  const imageId = wb.addImage({ base64: chartBase64, extension: "png" });
   wsChart.addImage(imageId, {
     tl: { col: 0, row: 2 },
     ext: { width: 1200, height: 550 },
