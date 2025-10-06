@@ -38,25 +38,28 @@ export default function DashboardPage() {
     else { await navigator.clipboard.writeText(url); alert("Lien copié"); }
   };
   const onQr = async (id: string) => {
-  const f = items.find(x => x.id === id);
-  if (!f) return;
-  const res = await fetch(`/api/forms/${f.id}/qrcode`);
-  if (!res.ok) {
-    alert("Impossible de générer le QR code");
-    return;
-  }
-  const blob = await res.blob();
-  const objectUrl = URL.createObjectURL(blob);
-  setQr({ open: true, src: objectUrl, title: f.title });
-};
-  const onDelete = async (id: string) => { if (!confirm("Supprimer ce formulaire ?")) return;
+    const f = items.find(x => x.id === id);
+    if (!f) return;
+    const res = await fetch(`/api/forms/${f.id}/qrcode`);
+    if (!res.ok) { alert("Impossible de générer le QR code"); return; }
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    setQr({ open: true, src: objectUrl, title: f.title });
+  };
+  const onDelete = async (id: string) => {
+    if (!confirm("Supprimer ce formulaire ?")) return;
     const res = await fetch(`/api/forms/${id}`, { method: "DELETE" });
     if (res.ok) setItems(arr => arr.filter(x => x.id !== id));
   };
-  const onToggle = async (id: string) => { const f = items.find(x => x.id === id); if (!f) return;
+  const onToggle = async (id: string) => {
+    const f = items.find(x => x.id === id); if (!f) return;
     const res = await fetch(`/api/forms/${id}`, { method: "PATCH", headers: {"content-type":"application/json"}, body: JSON.stringify({ isOpen: !f.isOpen }) });
     if (res.ok) setItems(arr => arr.map(x => x.id===id ? { ...x, isOpen: !x.isOpen, status: !x.isOpen ? "Actif" : "Brouillon" } : x));
   };
+
+  // 👉 Étape 3 : exports
+  const onExportXlsx = (id: string) => window.location.assign(`/api/forms/${id}/export`);
+  const onExportCsv  = (id: string) => window.location.assign(`/api/forms/${id}/export.csv`);
 
   return (
     <div className="min-h-screen bg-neutral-50 p-6 md:p-10">
@@ -88,13 +91,42 @@ export default function DashboardPage() {
                 <span>{f.responses} réponse{f.responses>1?"s":""}</span>
                 <span>Créé le {new Date(f.createdAt).toLocaleDateString()}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <button onClick={()=>onView(f.id)} className="flex-1 inline-flex items-center justify-center gap-2 border rounded-xl px-3 py-2 hover:bg-neutral-50"><Eye className="w-4 h-4"/>Voir</button>
-                <button onClick={()=>onShare(f.id)} title="Partager" className="inline-flex items-center justify-center border rounded-xl p-2 hover:bg-neutral-50"><Share2 className="w-4 h-4"/></button>
-                <button onClick={()=>onQr(f.id)} title="QR Code" className="inline-flex items-center justify-center border rounded-xl p-2 hover:bg-neutral-50"><QrCode className="w-4 h-4"/></button>
-                <button onClick={()=>onToggle(f.id)} title={f.isOpen?"Fermer":"Activer"} className="inline-flex items-center justify-center border rounded-xl p-2 hover:bg-neutral-50">{f.isOpen? "Fermer":"Activer"}</button>
-                <button onClick={()=>location.assign(`/dashboard/forms/${f.id}`)} title="Détails" className="inline-flex items-center justify-center border rounded-xl p-2 hover:bg-neutral-50"><BarChart3 className="w-4 h-4"/></button>
-                <button onClick={()=>onDelete(f.id)} title="Supprimer" className="inline-flex items-center justify-center border rounded-xl p-2 hover:bg-neutral-50"><Trash2 className="w-4 h-4 text-red-600"/></button>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button onClick={()=>onView(f.id)} className="flex-1 inline-flex items-center justify-center gap-2 border rounded-xl px-3 py-2 hover:bg-neutral-50">
+                  <Eye className="w-4 h-4"/>Voir
+                </button>
+                <button onClick={()=>onShare(f.id)} title="Partager" className="inline-flex items-center justify-center border rounded-xl p-2 hover:bg-neutral-50">
+                  <Share2 className="w-4 h-4"/>
+                </button>
+                <button onClick={()=>onQr(f.id)} title="QR Code" className="inline-flex items-center justify-center border rounded-xl p-2 hover:bg-neutral-50">
+                  <QrCode className="w-4 h-4"/>
+                </button>
+                <button onClick={()=>onToggle(f.id)} title={f.isOpen?"Fermer":"Activer"} className="inline-flex items-center justify-center border rounded-xl px-3 py-2 hover:bg-neutral-50">
+                  {f.isOpen? "Fermer":"Activer"}
+                </button>
+                <button onClick={()=>location.assign(`/dashboard/forms/${f.id}`)} title="Détails" className="inline-flex items-center justify-center border rounded-xl p-2 hover:bg-neutral-50">
+                  <BarChart3 className="w-4 h-4"/>
+                </button>
+                <button onClick={()=>onDelete(f.id)} title="Supprimer" className="inline-flex items-center justify-center border rounded-xl p-2 hover:bg-neutral-50">
+                  <Trash2 className="w-4 h-4 text-red-600"/>
+                </button>
+
+                {/* 👉 Nouveaux boutons d'export (Étape 3) */}
+                <button
+                  onClick={()=>onExportXlsx(f.id)}
+                  title="Exporter Excel (.xlsx)"
+                  className="inline-flex items-center justify-center gap-2 border rounded-xl px-3 py-2 hover:bg-neutral-50"
+                >
+                  <FileSpreadsheet className="w-4 h-4"/> XLSX
+                </button>
+                <button
+                  onClick={()=>onExportCsv(f.id)}
+                  title="Exporter CSV"
+                  className="inline-flex items-center justify-center gap-2 border rounded-xl px-3 py-2 hover:bg-neutral-50"
+                >
+                  CSV
+                </button>
               </div>
             </div>
           ))}
@@ -102,44 +134,44 @@ export default function DashboardPage() {
       </div>
 
       {qr.open && (
-  <div
-    className="fixed inset-0 bg-black/50 flex items-center justify-center p-6"
-    onClick={() => {
-      if (qr.src) URL.revokeObjectURL(qr.src); // évite les fuites mémoire
-      setQr({ open: false });
-    }}
-  >
-    <div
-      className="bg-white p-6 rounded-2xl shadow-xl"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <h2 className="text-lg font-semibold mb-4">QR — {qr.title}</h2>
-      {qr.src && (
-        <img
-          src={qr.src}
-          alt="QR code"
-          className="w-64 h-64 object-contain border rounded-xl"
-        />
-      )}
-      <div className="flex justify-end gap-2 mt-4">
-        {qr.src && (
-          <a href={qr.src} download="qr_form.png" className="px-4 py-2 rounded-xl border">
-            Télécharger
-          </a>
-        )}
-        <button
-          className="px-4 py-2 rounded-xl border"
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center p-6"
           onClick={() => {
-            if (qr.src) URL.revokeObjectURL(qr.src);
+            if (qr.src) URL.revokeObjectURL(qr.src); // évite les fuites mémoire
             setQr({ open: false });
           }}
         >
-          Fermer
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+          <div
+            className="bg-white p-6 rounded-2xl shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold mb-4">QR — {qr.title}</h2>
+            {qr.src && (
+              <img
+                src={qr.src}
+                alt="QR code"
+                className="w-64 h-64 object-contain border rounded-xl"
+              />
+            )}
+            <div className="flex justify-end gap-2 mt-4">
+              {qr.src && (
+                <a href={qr.src} download="qr_form.png" className="px-4 py-2 rounded-xl border">
+                  Télécharger
+                </a>
+              )}
+              <button
+                className="px-4 py-2 rounded-xl border"
+                onClick={() => {
+                  if (qr.src) URL.revokeObjectURL(qr.src);
+                  setQr({ open: false });
+                }}
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
