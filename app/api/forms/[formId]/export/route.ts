@@ -1,7 +1,74 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import ExcelJS from "exceljs";
-import QuickChart from "quickchart-js";
+  // Générer le PNG du graphique avec QuickChart (appel HTTP direct, sans dépendance)
+  const chartConfig = {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "MOYENNE",
+          data: dataBars,
+          backgroundColor: "#4f86c6",
+        },
+        {
+          type: "line",
+          label: "CIBLE",
+          data: dataTarget,
+          borderColor: "#6ab04c",
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: false,
+        },
+      ],
+    },
+    options: {
+      plugins: {
+        legend: { display: true, labels: { boxWidth: 18 } },
+        tooltip: { enabled: true },
+      },
+      scales: {
+        y: { min: 0, max: 5, title: { display: true, text: "Note" } },
+        x: { ticks: { maxRotation: 0, autoSkip: false } },
+      },
+      animation: false,
+    },
+  };
+
+  // Appel à l'API QuickChart (format PNG)
+  const qcResp = await fetch("https://quickchart.io/chart", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      width: 1200,
+      height: 600,
+      backgroundColor: "white",
+      format: "png",
+      version: "4",      // Chart.js v4
+      chart: chartConfig,
+    }),
+  });
+
+  if (!qcResp.ok) {
+    return NextResponse.json({ error: "Chart generation failed" }, { status: 502 });
+  }
+
+  const chartArrayBuf = await qcResp.arrayBuffer();
+  const chartBuffer = Buffer.from(chartArrayBuf);
+
+  const wsChart = wb.addWorksheet("GRAPHIQUE");
+  wsChart.columns = Array.from({ length: 12 }).map((_, i) => ({ header: "", key: `c${i+1}`, width: 14 }));
+  const chartTitle = wsChart.addRow([`Moyennes par critère (cible = ${cible})`]);
+  wsChart.mergeCells(chartTitle.number, 1, chartTitle.number, 12);
+  chartTitle.font = { bold: true, size: 13 });
+
+  const imageId = wb.addImage({ buffer: chartBuffer, extension: "png" });
+  wsChart.addImage(imageId, {
+    tl: { col: 0, row: 2 },
+    ext: { width: 1200, height: 550 },
+    editAs: "twoCell",
+  });
 
 const prisma = new PrismaClient();
 
