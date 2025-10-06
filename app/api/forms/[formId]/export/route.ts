@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import ExcelJS from "exceljs";
+import QuickChart from "quickchart-js";
 
 const prisma = new PrismaClient();
 
@@ -51,13 +52,16 @@ export async function GET(
   wb.creator = "Form Builder";
   wb.created = new Date();
 
-  // Quelques styles utilitaires
+  // Styles utilitaires
   const thin = { style: "thin" as const };
   const borderThin = { top: thin, left: thin, bottom: thin, right: thin };
-  // juste après const borderThin = ...
-const grayFill: ExcelJS.FillPattern = {type: "pattern",pattern: "solid",fgColor: { argb: "FFF3F4F6" },};
+  const grayFill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFF3F4F6" },
+  } as const;
 
-  // ========== FEUILLE 1 : SYNTHÈSE ==========
+  // ========= FEUILLE 1 : SYNTHÈSE =========
   const ws1 = wb.addWorksheet("SYNTHÈSE");
   ws1.columns = [
     { header: "", key: "c1", width: 32 },
@@ -117,7 +121,103 @@ const grayFill: ExcelJS.FillPattern = {type: "pattern",pattern: "solid",fgColor:
   section(ws1, "SYNTHÈSE");
   ws1.addRow(["A-t-elle répondu à vos attentes ?", `Oui: ${reponduOui}  /  Non: ${reponduNon}`]);
 
-  // ========== FEUILLE 2 : RÉCAP NOTES ==========
+  // ========= FEUILLE 2 : GRAPHIQUE =========
+  // Mapping des 5 barres (selon ta capture) :
+  // - Qualité du contenu      -> contGlobal
+  // - Qualité de l’animation  -> formGlobal  (ou formCommunication/formMaitrise selon préférence)
+  // - Qualité du support      -> contSupports
+  // - Gestion du temps        -> contRythme
+  // - Qualité de la logistique-> moyenne(envAccueil, envLieu, envMateriel)
+  const qualiteContenu   = contGlobal;
+  const qualiteAnimation = formGlobal ?? avg([formMaitrise, formCommunication, formClarte, formMethodo].filter((x): x is number => !!x));
+  const qualiteSupport   = contSupports;
+  const gestionTemps     = contRythme;
+  const qualiteLogistique= avg([envAccueil, envLieu, envMateriel].filter((x): x is number => !!x));
+
+  const labels = [
+    "Qualité du contenu",
+    "Qualité de l'animation",
+    "Qualité du support",
+    "Gestion du temps",
+    "Qualité de la logistique",
+  ];
+  const dataBars = [
+    qualiteContenu ?? null,
+    qualiteAnimation ?? null,
+    qualiteSupport ?? null,
+    gestionTemps ?? null,
+    qualiteLogistique ?? null,
+  ].map(v => (typeof v === "number" ? Number(v.toFixed(1)) : null));
+
+  const cible = Number(process.env.EXPORT_CHART_TARGET ?? 2.5);
+  const dataTarget = labels.map(() => cible);
+
+  // Générer le PNG du graphique avec QuickChart (Chart.js)
+  const qc = new QuickChart();
+  qc.setWidth(1200);
+  qc.setHeight(600);
+  qc.setBackgroundColor("white");
+  qc.setConfig({
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "MOYENNE",
+          data: dataBars,
+          // couleur proche de ta capture
+          backgroundColor: "#4f86c6",
+        },
+        {
+          type: "line",
+          label: "CIBLE",
+          data: dataTarget,
+          borderColor: "#6ab04c",
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: false,
+        },
+      ],
+    },
+    options: {
+      plugins: {
+        legend: { display: true, labels: { boxWidth: 18 } },
+        tooltip: { enabled: true },
+      },
+      scales: {
+        y: {
+          min: 0,
+          max: 5,
+          title: { display: true, text: "Note" },
+        },
+        x: {
+          ticks: { maxRotation: 0, autoSkip: false },
+        },
+      },
+      animation: false,
+    },
+  });
+
+  const chartBuffer = await qc.toBinary(); // PNG buffer
+  const wsChart = wb.addWorksheet("GRAPHIQUE");
+  wsChart.columns = Array.from({ length: 12 }).map((_, i) => ({
+    header: "",
+    key: `c${i + 1}`,
+    width: 14,
+  }));
+  const chartTitle = wsChart.addRow([`Moyennes par critère (cible = ${cible})`]);
+  wsChart.mergeCells(chartTitle.number, 1, chartTitle.number, 12);
+  chartTitle.font = { bold: true, size: 13 };
+
+  const imageId = wb.addImage({ buffer: chartBuffer, extension: "png" });
+  // Position : en haut de la feuille, grande image
+  wsChart.addImage(imageId, {
+    tl: { col: 0, row: 2 },        // top-left
+    ext: { width: 1200, height: 550 }, // taille (px)
+    editAs: "twoCell",
+  });
+
+  // ========= FEUILLE 3 : RÉCAP NOTES =========
   const ws2 = wb.addWorksheet("RÉCAP NOTES");
   ws2.columns = [
     { header: "Rubrique", key: "rubrique", width: 28 },
@@ -156,7 +256,7 @@ const grayFill: ExcelJS.FillPattern = {type: "pattern",pattern: "solid",fgColor:
 
   ws2.views = [{ state: "frozen", ySplit: 1 }];
 
-  // ========== FEUILLE 3 : RÉPONSES ==========
+  // ========= FEUILLE 4 : RÉPONSES =========
   const ws3 = wb.addWorksheet("RÉPONSES");
   const headers3 = [
     "Nom", "Prénoms", "Fonction", "Entreprise",
@@ -189,9 +289,8 @@ const grayFill: ExcelJS.FillPattern = {type: "pattern",pattern: "solid",fgColor:
   ws3.views = [{ state: "frozen", ySplit: 1 }];
   ws3.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers3.length } };
 
-  // ========== FEUILLE 4 : BRUT ==========
+  // ========= FEUILLE 5 : BRUT =========
   const ws4 = wb.addWorksheet("BRUT");
-  // On dump toutes les colonnes connues du modèle Response pour audit/exports avancés
   const rawHeaders = [
     "id","formId","submittedAt",
     "participantNom","participantPrenoms","participantFonction","participantEntreprise",
