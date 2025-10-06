@@ -54,7 +54,8 @@ export async function GET(
   // Quelques styles utilitaires
   const thin = { style: "thin" as const };
   const borderThin = { top: thin, left: thin, bottom: thin, right: thin };
-  const grayFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } };
+  // juste après const borderThin = ...
+const grayFill: ExcelJS.FillPattern = {type: "pattern",pattern: "solid",fgColor: { argb: "FFF3F4F6" },};
 
   // ========== FEUILLE 1 : SYNTHÈSE ==========
   const ws1 = wb.addWorksheet("SYNTHÈSE");
