@@ -1,7 +1,7 @@
 // app/f/[slug]/page.tsx
 import { PrismaClient } from "@prisma/client";
 // ⚠️ Chemin RELATIF (évite les soucis d'alias @ en prod)
-import FormClient from "../../../components/FormClient";
+import FormClient from "../components/FormClient";
 import { notFound } from "next/navigation";
 
 // Désactive le prerender pour éviter les caches avec Render
