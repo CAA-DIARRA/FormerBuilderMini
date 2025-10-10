@@ -39,8 +39,28 @@ type Agg = {
 };
 
 /* --------------------------------- i18n export ------------------------------- */
+type ExportI18n = {
+  sheet1Title: string;
+  sheet2Title: string;
 
-const EXPORT_I18N = {
+  envTitle: string;
+  envRows: { key: keyof Agg; label: string }[];
+
+  contTitle: string;
+  contRows: { key: keyof Agg; label: string }[];
+
+  formTitle: string; // clé requise
+  formRows: { key: keyof Agg; label: string }[];
+
+  target: number;
+  chartCategories: string[];
+  chartTitle: (cible: number) => string;
+  legendMean: string;
+  legendTarget: string;
+  computeMeans: (agg: Agg) => (number | null)[];
+  fileSuffix: string;
+};
+const EXPORT_I18N: Record<"fr" | "en", ExportI18n> = {
   fr: {
     sheet1Title: "SYNTHÈSE",
     sheet2Title: "GRAPHIQUE",
@@ -72,10 +92,7 @@ const EXPORT_I18N = {
       { key: "formGlobal",        label: "5. Évaluation globale du formateur" },
     ],
 
-    // Cible (modifiable par langue)
     target: 2.5,
-
-    // Catégories du graphe (ordre = computeMeans)
     chartCategories: [
       "Qualité du contenu",
       "Qualité de l’animation",
@@ -83,26 +100,21 @@ const EXPORT_I18N = {
       "Gestion du temps",
       "Qualité de la logistique",
     ],
-
     chartTitle: (cible: number) => `Moyennes par critère (cible = ${cible})`,
     legendMean: "MOYENNE",
     legendTarget: "CIBLE",
 
-    // Calcul des 5 moyennes affichées sur le graphe
-    computeMeans: (agg: Agg): (number | null)[] => {
+    computeMeans: (agg: Agg) => {
       const mContenu = avg([
         agg.contAttentes, agg.contMethodologie, agg.contSupports,
         agg.contExercices, agg.contUtiliteTravail, agg.contRythme, agg.contGlobal,
       ]);
-
       const mAnimation = avg([
         agg.formMaitrise, agg.formCommunication, agg.formClarte, agg.formMethodo, agg.formGlobal,
       ]);
-
       const mSupport = agg.contSupports ?? null;
       const mTemps = agg.contRythme ?? null;
       const mLogistique = avg([agg.envAccueil, agg.envLieu, agg.envMateriel]);
-
       return [mContenu, mAnimation, mSupport, mTemps, mLogistique];
     },
 
@@ -131,8 +143,16 @@ const EXPORT_I18N = {
       { key: "contGlobal",         label: "Overall evaluation of the training" },
     ],
 
-    target: 2.5,
+    formTitle: "III. Trainer(s)",
+    formRows: [
+      { key: "formMaitrise",      label: "1. Subject matter expertise" },
+      { key: "formCommunication", label: "2. Quality of communication" },
+      { key: "formClarte",        label: "3. Clarity of answers to questions" },
+      { key: "formMethodo",       label: "4. Mastery of the training methodology" },
+      { key: "formGlobal",        label: "5. Overall evaluation of the trainer" },
+    ],
 
+    target: 2.5,
     chartCategories: [
       "Content quality",
       "Facilitation quality",
@@ -140,25 +160,21 @@ const EXPORT_I18N = {
       "Time management",
       "Logistics quality",
     ],
-
     chartTitle: (cible: number) => `Averages by criterion (target = ${cible})`,
     legendMean: "AVERAGE",
     legendTarget: "TARGET",
 
-    computeMeans: (agg: Agg): (number | null)[] => {
+    computeMeans: (agg: Agg) => {
       const mContent = avg([
         agg.contAttentes, agg.contMethodologie, agg.contSupports,
         agg.contExercices, agg.contUtiliteTravail, agg.contRythme, agg.contGlobal,
       ]);
-
       const mFacilitation = avg([
         agg.formMaitrise, agg.formCommunication, agg.formClarte, agg.formMethodo, agg.formGlobal,
       ]);
-
       const mMaterials = agg.contSupports ?? null;
       const mTime = agg.contRythme ?? null;
       const mLogistics = avg([agg.envAccueil, agg.envLieu, agg.envMateriel]);
-
       return [mContent, mFacilitation, mMaterials, mTime, mLogistics];
     },
 
