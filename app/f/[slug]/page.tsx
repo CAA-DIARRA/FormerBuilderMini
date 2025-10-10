@@ -1,6 +1,5 @@
-
 import { PrismaClient } from "@prisma/client";
-import FormClient from "@/components/FormClient";
+import FormClient from "../../components/FormClient"; // ← nouveau chemin
 
 export default async function PublicFormPage({
   params,
