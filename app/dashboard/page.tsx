@@ -72,15 +72,15 @@ export default function DashboardPage() {
   };
 
   // Génère un QR (PNG blob) pour une langue donnée et renvoie un ObjectURL
-  const fetchQr = async (formId: string, lang: "fr" | "en") => {
-    const res = await fetch(`/api/forms/${formId}/qrcode?lang=${lang}`);
-    if (!res.ok) {
-      alert("QR code generation failed");
-      return;
-    }
-    const blob = await res.blob();
-    return URL.createObjectURL(blob);
-  };
+const [qr, setQr] = useState<{ open: boolean; src?: string; title?: string; lang?: "fr"|"en" }>({ open: false });
+const [qrChoice, setQrChoice] = useState<{ open: boolean; formId?: string; title?: string }>({ open: false });
+
+const fetchQr = async (formId: string, lang: "fr" | "en") => {
+  const res = await fetch(`/api/forms/${formId}/qrcode?lang=${lang}`);
+  if (!res.ok) { alert("Impossible de générer le QR code"); return; }
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+};
 
   // Version bilingue : OK = FR, Annuler = EN
   const onQr = async (id: string) => {
