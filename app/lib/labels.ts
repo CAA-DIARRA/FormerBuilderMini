@@ -31,7 +31,7 @@ const FR: Labels = {
     { key: "contMethodologie", label: "4. Comment avez-vous trouvé la méthodologie utilisée pour la formation ?" },
     { key: "contSupports", label: "5. Comment avez-vous trouvé les supports de la formation ?" },
     { key: "contRythme", label: "6. Comment avez-vous trouvé le rythme de la formation ?" },
-    { key: "contGlobal", label: "Évaluation globale de la formation" },
+    { key: "contGlobal", label: "7.Évaluation globale de la formation" },
   ],
   form: [
     { key: "formMaitrise", label: "1. Maîtrise du sujet" },
