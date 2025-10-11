@@ -1,6 +1,6 @@
 // app/f/[slug]/page.tsx
 import { PrismaClient } from "@prisma/client";
-import FormClient from "../../../components/FormClient";
+import FormClient from "../../components/FormClient";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
