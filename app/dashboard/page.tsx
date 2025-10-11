@@ -1,3 +1,4 @@
+// app/dashboard/page.tsx
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -28,7 +29,20 @@ function StatusBadge({ open }: { open: boolean }) {
 export default function DashboardPage() {
   const router = useRouter();
   const [items, setItems] = useState<FormItem[]>([]);
-  const [qr, setQr] = useState<{ open: boolean; src?: string; title?: string }>({ open: false });
+
+  // QR state (unique) + choix de langue
+  const [qr, setQr] = useState<{
+    open: boolean;
+    src?: string;
+    title?: string;
+    lang?: "fr" | "en";
+  }>({ open: false });
+
+  const [qrChoice, setQrChoice] = useState<{
+    open: boolean;
+    formId?: string;
+    title?: string;
+  }>({ open: false });
 
   useEffect(() => {
     (async () => {
@@ -70,33 +84,11 @@ export default function DashboardPage() {
       alert("Lien copié");
     }
   };
-
-  // Génère un QR (PNG blob) pour une langue donnée et renvoie un ObjectURL
-const [qr, setQr] = useState<{ open: boolean; src?: string; title?: string; lang?: "fr"|"en" }>({ open: false });
-const [qrChoice, setQrChoice] = useState<{ open: boolean; formId?: string; title?: string }>({ open: false });
-
-const fetchQr = async (formId: string, lang: "fr" | "en") => {
-  const res = await fetch(`/api/forms/${formId}/qrcode?lang=${lang}`);
-  if (!res.ok) { alert("Impossible de générer le QR code"); return; }
-  const blob = await res.blob();
-  return URL.createObjectURL(blob);
-};
-
-  // Version bilingue : OK = FR, Annuler = EN
-  const onQr = async (id: string) => {
-    const f = items.find((x) => x.id === id);
-    if (!f) return;
-    const lang = window.confirm("QR en Français ? (OK=FR, Annuler=EN)") ? "fr" : "en";
-    const src = await fetchQr(f.id, lang);
-    if (src) setQr({ open: true, src, title: `${f.title} — ${lang.toUpperCase()}` });
-  };
-
   const onDelete = async (id: string) => {
     if (!confirm("Supprimer ce formulaire ?")) return;
     const res = await fetch(`/api/forms/${id}`, { method: "DELETE" });
     if (res.ok) setItems((arr) => arr.filter((x) => x.id !== id));
   };
-
   const onToggle = async (id: string) => {
     const f = items.find((x) => x.id === id);
     if (!f) return;
@@ -108,18 +100,38 @@ const fetchQr = async (formId: string, lang: "fr" | "en") => {
     if (res.ok)
       setItems((arr) =>
         arr.map((x) =>
-          x.id === id ? { ...x, isOpen: !x.isOpen, status: !x.isOpen ? "Actif" : "Brouillon" } : x
+          x.id === id
+            ? {
+                ...x,
+                isOpen: !x.isOpen,
+                status: !x.isOpen ? "Actif" : "Brouillon",
+              }
+            : x
         )
       );
   };
 
-  // Exports
-  const onExportXlsx = (id: string) => window.location.assign(`/api/forms/${id}/export`);
-  const onExportCsv = (id: string) => window.location.assign(`/api/forms/${id}/export.csv`);
+  // Export (si backend en place)
+  const onExportXlsx = (id: string) =>
+    window.location.assign(`/api/forms/${id}/export`);
+  const onExportCsv = (id: string) =>
+    window.location.assign(`/api/forms/${id}/export.csv`);
+
+  // Génère un QR et renvoie un ObjectURL
+  const fetchQr = async (formId: string, lang: "fr" | "en") => {
+    const res = await fetch(`/api/forms/${formId}/qrcode?lang=${lang}`);
+    if (!res.ok) {
+      alert("Impossible de générer le QR code");
+      return;
+    }
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  };
 
   return (
     <div className="min-h-screen bg-neutral-50 p-6 md:p-10">
       <div className="max-w-6xl mx-auto space-y-8">
+        {/* Stat cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="flex items-center gap-4 border rounded-2xl p-4 bg-white shadow-sm">
             <div className="p-2 rounded-xl bg-neutral-100">
@@ -136,7 +148,9 @@ const fetchQr = async (formId: string, lang: "fr" | "en") => {
             </div>
             <div>
               <div className="text-sm text-neutral-600">Total Réponses</div>
-              <div className="text-2xl font-semibold">{stats.totalResponses}</div>
+              <div className="text-2xl font-semibold">
+                {stats.totalResponses}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-4 border rounded-2xl p-4 bg-white shadow-sm">
@@ -150,6 +164,7 @@ const fetchQr = async (formId: string, lang: "fr" | "en") => {
           </div>
         </div>
 
+        {/* Header actions */}
         <div className="flex items-center justify-between flex-wrap gap-4">
           <h1 className="text-2xl md:text-3xl font-bold">Mes Formulaires</h1>
           <div className="flex flex-wrap items-center gap-2">
@@ -175,6 +190,7 @@ const fetchQr = async (formId: string, lang: "fr" | "en") => {
           </div>
         </div>
 
+        {/* Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {items.map((f) => (
             <div
@@ -183,10 +199,13 @@ const fetchQr = async (formId: string, lang: "fr" | "en") => {
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-xl font-semibold leading-tight">{f.title}</h3>
+                  <h3 className="text-xl font-semibold leading-tight">
+                    {f.title}
+                  </h3>
                 </div>
                 <StatusBadge open={f.isOpen} />
               </div>
+
               <div className="flex items-center justify-between text-sm text-neutral-600">
                 <span>
                   {f.responses} réponse{f.responses > 1 ? "s" : ""}
@@ -202,6 +221,7 @@ const fetchQr = async (formId: string, lang: "fr" | "en") => {
                   <Eye className="w-4 h-4" />
                   Voir
                 </button>
+
                 <button
                   onClick={() => onShare(f.id)}
                   title="Partager"
@@ -209,13 +229,18 @@ const fetchQr = async (formId: string, lang: "fr" | "en") => {
                 >
                   <Share2 className="w-4 h-4" />
                 </button>
+
+                {/* Ouvre le modal de choix de langue */}
                 <button
-                  onClick={() => onQr(f.id)}
+                  onClick={() =>
+                    setQrChoice({ open: true, formId: f.id, title: f.title })
+                  }
                   title="QR Code"
                   className="inline-flex items-center justify-center border rounded-xl p-2 hover:bg-neutral-50"
                 >
                   <QrCode className="w-4 h-4" />
                 </button>
+
                 <button
                   onClick={() => onToggle(f.id)}
                   title={f.isOpen ? "Fermer" : "Activer"}
@@ -223,6 +248,7 @@ const fetchQr = async (formId: string, lang: "fr" | "en") => {
                 >
                   {f.isOpen ? "Fermer" : "Activer"}
                 </button>
+
                 <button
                   onClick={() => location.assign(`/dashboard/forms/${f.id}`)}
                   title="Détails"
@@ -230,6 +256,7 @@ const fetchQr = async (formId: string, lang: "fr" | "en") => {
                 >
                   <BarChart3 className="w-4 h-4" />
                 </button>
+
                 <button
                   onClick={() => onDelete(f.id)}
                   title="Supprimer"
@@ -259,11 +286,76 @@ const fetchQr = async (formId: string, lang: "fr" | "en") => {
         </div>
       </div>
 
+      {/* Modal 1 : choix de langue */}
+      {qrChoice.open && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center p-6"
+          onClick={() => setQrChoice({ open: false })}
+        >
+          <div
+            className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold mb-4">QR — {qrChoice.title}</h2>
+            <p className="text-sm text-neutral-600 mb-4">
+              Choisir la langue du formulaire :
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                className="px-4 py-2 rounded-xl border hover:bg-neutral-50"
+                onClick={async () => {
+                  if (!qrChoice.formId) return;
+                  const src = await fetchQr(qrChoice.formId, "fr");
+                  if (src) {
+                    setQrChoice({ open: false });
+                    setQr({
+                      open: true,
+                      src,
+                      title: `${qrChoice.title} — FR`,
+                      lang: "fr",
+                    });
+                  }
+                }}
+              >
+                🇫🇷 Français
+              </button>
+              <button
+                className="px-4 py-2 rounded-xl border hover:bg-neutral-50"
+                onClick={async () => {
+                  if (!qrChoice.formId) return;
+                  const src = await fetchQr(qrChoice.formId, "en");
+                  if (src) {
+                    setQrChoice({ open: false });
+                    setQr({
+                      open: true,
+                      src,
+                      title: `${qrChoice.title} — EN`,
+                      lang: "en",
+                    });
+                  }
+                }}
+              >
+                🇬🇧 English
+              </button>
+            </div>
+            <div className="flex justify-end mt-4">
+              <button
+                className="px-4 py-2 rounded-xl border"
+                onClick={() => setQrChoice({ open: false })}
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 2 : aperçu & téléchargement */}
       {qr.open && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center p-6"
           onClick={() => {
-            if (qr.src) URL.revokeObjectURL(qr.src); // évite les fuites mémoire
+            if (qr.src) URL.revokeObjectURL(qr.src);
             setQr({ open: false });
           }}
         >
@@ -283,7 +375,7 @@ const fetchQr = async (formId: string, lang: "fr" | "en") => {
               {qr.src && (
                 <a
                   href={qr.src}
-                  download="qr_form.png"
+                  download={`qr_${(qr.lang || "fr")}.png`}
                   className="px-4 py-2 rounded-xl border"
                 >
                   Télécharger
