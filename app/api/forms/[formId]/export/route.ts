@@ -1,222 +1,360 @@
+// app/api/forms/[formId]/export/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import ExcelJS from "exceljs";
+import { getLabels } from "@/app/lib/labels";
 
 const prisma = new PrismaClient();
 
-export async function GET(req: Request, { params }: { params: { formId: string } }) {
-  const { formId } = params;
-  const url = new URL(req.url);
-  const lang = url.searchParams.get("lang") === "en" ? "en" : "fr";
+// Cible par défaut (modifiable)
+const CIBLE = 2.5;
 
-  // 1️⃣ Récupération du formulaire et des réponses
-  const form = await prisma.form.findUnique({ where: { id: formId } });
+// Les champs numériques du questionnaire (ordre = affichage)
+const ENV_KEYS = [
+  { key: "envAccueil", labelKey: "envAccueil" },
+  { key: "envLieu", labelKey: "envLieu" },
+  { key: "envMateriel", labelKey: "envMateriel" },
+] as const;
+
+const CONT_KEYS = [
+  { key: "contAttentes", labelKey: "contAttentes" },
+  { key: "contUtiliteTravail", labelKey: "contUtiliteTravail" },
+  { key: "contExercices", labelKey: "contExercices" },
+  { key: "contMethodologie", labelKey: "contMethodologie" },
+  { key: "contSupports", labelKey: "contSupports" },
+  { key: "contRythme", labelKey: "contRythme" },
+  { key: "contGlobal", labelKey: "contGlobal" },
+] as const;
+
+const FORM_KEYS = [
+  { key: "formMaitrise", labelKey: "formMaitrise" },
+  { key: "formCommunication", labelKey: "formCommunication" },
+  { key: "formClarte", labelKey: "formClarte" },
+  { key: "formMethodo", labelKey: "formMethodo" },
+  { key: "formGlobal", labelKey: "formGlobal" },
+] as const;
+
+type NumKey =
+  | (typeof ENV_KEYS)[number]["key"]
+  | (typeof CONT_KEYS)[number]["key"]
+  | (typeof FORM_KEYS)[number]["key"];
+
+function avg(nums: number[]) {
+  if (!nums.length) return null;
+  const s = nums.reduce((a, b) => a + b, 0);
+  return Math.round((s / nums.length) * 10) / 10;
+}
+
+// Convertit arrayBuffer → Node Buffer (ExcelJS attend un Buffer)
+function bufFrom(ab: ArrayBuffer): Buffer {
+  return Buffer.from(new Uint8Array(ab));
+}
+
+export async function GET(req: Request, { params }: { params: { formId: string } }) {
+  const { searchParams } = new URL(req.url);
+  const lang = (searchParams.get("lang") === "en" ? "en" : "fr") as "fr" | "en";
+  const L = getLabels(lang);
+
+  const form = await prisma.form.findUnique({ where: { id: params.formId } });
   if (!form) return NextResponse.json({ error: "Form not found" }, { status: 404 });
 
-  const responses = await prisma.response.findMany({ where: { formId } });
-  if (!responses.length)
-    return NextResponse.json({ error: "No responses found" }, { status: 404 });
+  const reps = await prisma.response.findMany({
+    where: { formId: form.id },
+    orderBy: { submittedAt: "asc" },
+  });
 
-  // 2️⃣ Prépare le classeur Excel
+  // --- Prépare les données numériques (par clé) ---
+  const byKey: Record<NumKey, number[]> = Object.create(null);
+  [...ENV_KEYS, ...CONT_KEYS, ...FORM_KEYS].forEach(({ key }) => (byKey[key as NumKey] = []));
+
+  // Attentes (Oui / Partiellement / Non)
+  let countYes = 0;
+  let countPart = 0;
+  let countNo = 0;
+
+  // Textes libres
+  const listComplementaires: string[] = [];
+  const listTemoignages: string[] = [];
+
+  // Initiales participants (pour les colonnes)
+  const initials: string[] = [];
+
+  for (const r of reps) {
+    // valeurs numériques (si notées)
+    [...ENV_KEYS, ...CONT_KEYS, ...FORM_KEYS].forEach(({ key }) => {
+      const v = (r as any)[key];
+      if (typeof v === "number") byKey[key as NumKey].push(v);
+      else byKey[key as NumKey].push(null as any); // on laisse des trous pour affichage
+    });
+
+    // initiales
+    const nom = (r as any).participantNom || "";
+    const pren = (r as any).participantPrenoms || "";
+    const ini =
+      (pren?.trim()?.[0]?.toUpperCase() ?? "") +
+      (nom?.trim()?.[0]?.toUpperCase() ?? "");
+    initials.push(ini || `P${initials.length + 1}`);
+
+    // attentes
+    const att = (r as any).reponduAttentes;
+    if (att === "OUI" || att === "YES") countYes++;
+    else if (att === "PARTIELLEMENT" || att === "PARTIALLY") countPart++;
+    else if (att === "NON" || att === "NO") countNo++;
+
+    // listes libres
+    const comp = (r as any).formationsComplementaires;
+    if (comp && String(comp).trim()) listComplementaires.push(String(comp).trim());
+    const tem = (r as any).temoignage;
+    if (tem && String(tem).trim()) listTemoignages.push(String(tem).trim());
+  }
+
+  // Moyennes par groupe
+  const envAvg = ENV_KEYS.map(({ key }) => avg(byKey[key as NumKey].filter(n => typeof n === "number") as number[]));
+  const contAvg = CONT_KEYS.map(({ key }) => avg(byKey[key as NumKey].filter(n => typeof n === "number") as number[]));
+  const formAvg = FORM_KEYS.map(({ key }) => avg(byKey[key as NumKey].filter(n => typeof n === "number") as number[]));
+
+  // === Création du classeur ===
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet("SYNTHÈSE");
+  wb.creator = "FormBuilder";
+  wb.created = new Date();
 
-  // Style générique
-  const grayFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEEEEE" } };
+  const grayFill: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFEFEF" } };
 
-  // === OUTILS ===
-  const writeGroupTitle = (ws: ExcelJS.Worksheet, title: string) => {
-    const row = ws.addRow([title]);
-    row.font = { bold: true, size: 13 };
-    ws.mergeCells(row.number, 1, row.number, 5);
+  // Helper cellule group title
+  const writeGroupTitle = (ws: ExcelJS.Worksheet, label: string) => {
+    const r = ws.addRow([label]);
+    ws.mergeCells(r.number, 1, r.number, ws.columnCount);
+    r.font = { bold: true };
+    r.fill = grayFill;
+    r.alignment = { vertical: "middle", horizontal: "left" };
   };
 
-  const writeRow = (ws: ExcelJS.Worksheet, label: string, vals: any[]) => {
-    const row = ws.addRow([label, ...vals]);
-    row.getCell(1).alignment = { vertical: "middle", horizontal: "left" };
-    row.alignment = { vertical: "middle", horizontal: "center" };
-  };
+  // === FEUILLE 1 : FORMATION ===
+  const ws1 = wb.addWorksheet(L.sheet1Title);
 
-  // === 3️⃣ CALCUL MOYENNES ===
-  function avg(key: keyof any) {
-    const arr = responses.map((r: any) => r[key]);
-    const valid = arr.filter((x: any) => typeof x === "number");
-    return valid.length ? (valid.reduce((a: number, b: number) => a + b, 0) / valid.length) : null;
-  }
-
-  const envQuestions = [
-    ["1. Comment avez-vous trouvé l'Accueil ?", "envAccueil"],
-    ["2. Comment avez-vous trouvé le(s) Lieu(x) de formation ?", "envLieu"],
-    ["3. Comment avez-vous trouvé le Matériel mis à disposition ?", "envMateriel"]
-  ];
-  const contQuestions = [
-    ["1. Le contenu couvre-t-il vos attentes ?", "contAttentes"],
-    ["2. Le contenu est-il utile pour votre travail ?", "contUtiliteTravail"],
-    ["3. Comment avez-vous trouvé les exercices / exemples / vidéos ?", "contExercices"],
-    ["4. Comment avez-vous trouvé la méthodologie utilisée ?", "contMethodologie"],
-    ["5. Comment avez-vous trouvé les supports de la formation ?", "contSupports"],
-    ["6. Comment avez-vous trouvé le rythme de la formation ?", "contRythme"],
-    ["Évaluation globale de la formation", "contGlobal"]
-  ];
-  const formQuestions = [
-    ["1. Maîtrise du sujet", "formMaitrise"],
-    ["2. Qualité de communication", "formCommunication"],
-    ["3. Clarté des réponses aux questions", "formClarte"],
-    ["4. Maîtrise méthodologie de la formation", "formMethodo"],
-    ["5. Évaluation globale du formateur", "formGlobal"]
+  // colonnes : Critère | P1..Pn | Moyenne | Cible
+  ws1.columns = [
+    { header: L.colCritere, key: "crit", width: 60 },
+    ...initials.map((ini, i) => ({ header: ini || `P${i + 1}`, key: `p${i + 1}`, width: 8 })),
+    { header: L.colMoyenne, key: "avg", width: 10 },
+    { header: L.colCible, key: "target", width: 8 },
   ];
 
-  const participants = responses.map((r, i) => {
-    const nom = (r.participantNom ?? "").trim().toUpperCase();
-    const pre = (r.participantPrenoms ?? "").trim();
-    if (!nom && !pre) return `P${i + 1}`;
-    return `${pre ? pre[0].toUpperCase() + pre.slice(1) : ""} ${nom}`;
-  });
+  // Titre / méta
+  const titleRow = ws1.addRow([`${form.title ?? "Formation"} — ${L.formSheetSubtitle}`]);
+  ws1.mergeCells(titleRow.number, 1, titleRow.number, ws1.columnCount);
+  titleRow.font = { bold: true, size: 14 };
+  ws1.addRow([`${L.metaTrainer}: ${form.trainerName ?? "-"}`]);
+  ws1.addRow([`${L.metaDate}: ${form.sessionDate ? new Date(form.sessionDate).toLocaleDateString() : "-"}`]);
+  ws1.addRow([`${L.metaPlace}: ${form.location ?? "-"}`]);
+  ws1.addRow([]); // espace
 
-  // === 4️⃣ TABLEAU SYNTHÈSE ====================================================
-  writeGroupTitle(ws, "I. L’environnement de la formation");
-  ws.addRow(["Critère", ...participants, "Moyenne", "Cible"]);
-  envQuestions.forEach(([label, key]) => {
-    const vals = responses.map((r: any) => r[key] ?? "");
-    const moy = avg(key as any);
-    ws.addRow([label, ...vals, moy?.toFixed(2) ?? "-", 2.5]);
-  });
-  ws.addRow([]);
-
-  writeGroupTitle(ws, "II. Le Contenu de la formation");
-  ws.addRow(["Critère", ...participants, "Moyenne", "Cible"]);
-  contQuestions.forEach(([label, key]) => {
-    const vals = responses.map((r: any) => r[key] ?? "");
-    const moy = avg(key as any);
-    ws.addRow([label, ...vals, moy?.toFixed(2) ?? "-", 2.5]);
-  });
-  ws.addRow([]);
-
-  writeGroupTitle(ws, "III. Le(s) Formateur(s)");
-  ws.addRow(["Critère", ...participants, "Moyenne", "Cible"]);
-  formQuestions.forEach(([label, key]) => {
-    const vals = responses.map((r: any) => r[key] ?? "");
-    const moy = avg(key as any);
-    ws.addRow([label, ...vals, moy?.toFixed(2) ?? "-", 2.5]);
-  });
-
-  // === 5️⃣ TABLEAU ATTENTE DES PARTICIPANTS ====================================
-  let row = (ws.lastRow?.number ?? 0) + 2;
-  const colStart = 1;
-
-  {
-    const title = "ATTENTE DES PARTICIPANTS";
-    const r = ws.getRow(row);
-    r.getCell(colStart).value = title;
-    r.font = { bold: true, size: 13 };
-    const width = 1 + participants.length + 1;
-    ws.mergeCells(row, colStart, row, colStart + width - 1);
-    row += 2;
-
-    const sub = ws.getRow(row);
-    sub.getCell(colStart).value = "Cette formation a-t-elle répondu à vos attentes ?";
-    sub.font = { italic: true };
-    ws.mergeCells(row, colStart, row, colStart + width - 1);
-    row += 1;
-
-    const header = ws.getRow(row);
-    header.getCell(colStart).value = "Réponse";
-    participants.forEach((name, i) => {
-      header.getCell(colStart + 1 + i).value = name;
-    });
-    header.getCell(colStart + 1 + participants.length).value = "%";
-    header.font = { bold: true };
-    header.alignment = { horizontal: "center" };
-    row += 1;
-
-    const lines = [
-      { key: "OUI", label: "OUI", count: 0 },
-      { key: "NON", label: "NON", count: 0 }
+  // Section ENVIRONNEMENT
+  writeGroupTitle(ws1, L.envTitle);
+  for (let i = 0; i < ENV_KEYS.length; i++) {
+    const def = ENV_KEYS[i];
+    const vals = byKey[def.key as NumKey];
+    const row = [
+      L.labels[def.labelKey],
+      ...vals.map(v => (v == null ? "" : v)),
+      envAvg[i] ?? "",
+      CIBLE,
     ];
+    ws1.addRow(row);
+  }
+  ws1.addRow([]);
 
-    lines.forEach((line) => {
-      const rr = ws.getRow(row);
-      rr.getCell(colStart).value = line.label;
-      participants.forEach((_, i) => {
-        const val = (responses[i].reponduAttentes ?? "").toUpperCase();
-        const hit = val === line.key ? 1 : "";
-        if (hit === 1) line.count += 1;
-        rr.getCell(colStart + 1 + i).value = hit;
-        rr.getCell(colStart + 1 + i).alignment = { horizontal: "center" };
-      });
-      const pct = Math.round((line.count / responses.length) * 100);
-      rr.getCell(colStart + 1 + participants.length).value = `${pct}%`;
-      rr.getCell(colStart + 1 + participants.length).alignment = { horizontal: "center" };
-      row += 1;
-    });
+  // Section CONTENU
+  writeGroupTitle(ws1, L.contTitle);
+  for (let i = 0; i < CONT_KEYS.length; i++) {
+    const def = CONT_KEYS[i];
+    const vals = byKey[def.key as NumKey];
+    const row = [
+      L.labels[def.labelKey],
+      ...vals.map(v => (v == null ? "" : v)),
+      contAvg[i] ?? "",
+      CIBLE,
+    ];
+    ws1.addRow(row);
+  }
+  ws1.addRow([]);
 
-    row += 2;
+  // Section FORMATEUR(S)
+  writeGroupTitle(ws1, L.formTitle);
+  for (let i = 0; i < FORM_KEYS.length; i++) {
+    const def = FORM_KEYS[i];
+    const vals = byKey[def.key as NumKey];
+    const row = [
+      L.labels[def.labelKey],
+      ...vals.map(v => (v == null ? "" : v)),
+      formAvg[i] ?? "",
+      CIBLE,
+    ];
+    ws1.addRow(row);
+  }
+  ws1.addRow([]);
+
+  // ATTENTES (tableau comptage + %)
+  writeGroupTitle(ws1, L.expectationsTitle);
+  const totalAtt = countYes + countPart + countNo || 1;
+  const pct = (n: number) => Math.round((n / totalAtt) * 1000) / 10; // 1 décimale
+  ws1.addRow([L.expHeader, "", "", "", "", ""]);
+  ws1.addRow([L.yes, countYes, "", "", "", `${pct(countYes)}%`]);
+  // On regroupe Partiellement dans NON pour rester fidèle à la maquette
+  ws1.addRow([L.no, countNo + countPart, "", "", "", `${pct(countNo + countPart)}%`]);
+  ws1.addRow([]);
+
+  // Formations complémentaires (liste)
+  writeGroupTitle(ws1, L.complementaryTitle);
+  if (listComplementaires.length === 0) ws1.addRow([L.none]);
+  else listComplementaires.forEach((t, i) => ws1.addRow([`${i + 1}. ${t}`]));
+  ws1.addRow([]);
+
+  // Témoignages (liste)
+  writeGroupTitle(ws1, L.testimonialTitle);
+  if (listTemoignages.length === 0) ws1.addRow([L.none]);
+  else listTemoignages.forEach((t, i) => ws1.addRow([`${i + 1}. ${t}`]));
+
+  // === FEUILLE 2 : GRAPHIQUE CONTENU ===
+  const ws2 = wb.addWorksheet(L.sheet2Title);
+  ws2.columns = Array.from({ length: 12 }, (_, i) => ({ header: "", key: `c${i + 1}`, width: 14 }));
+
+  const r2 = ws2.addRow([L.chartContentTitle]);
+  ws2.mergeCells(r2.number, 1, r2.number, 12);
+  r2.font = { bold: true, size: 13 };
+
+  // Prépare dataset QuickChart
+  const labelsCont = CONT_KEYS.map(k => L.labels[k.labelKey]);
+  const dataCont = contAvg.map(x => (x ?? 0));
+  const qcConf2 = {
+    type: "bar",
+    data: {
+      labels: labelsCont,
+      datasets: [
+        { label: L.avgLegend, data: dataCont, backgroundColor: "#4f82c0" },
+        {
+          type: "line",
+          label: L.targetLegend,
+          data: labelsCont.map(() => CIBLE),
+          borderColor: "#2ca02c",
+          fill: false,
+        },
+      ],
+    },
+    options: {
+      plugins: { legend: { position: "bottom" } },
+      scales: { y: { min: 0, max: 4, title: { display: true, text: L.colMoyenne } } },
+    },
+  };
+
+  const img2Resp = await fetch("https://quickchart.io/chart?width=1400&height=650", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ backgroundColor: "white", format: "png", chart: qcConf2 }),
+  });
+  if (img2Resp.ok) {
+    const ab = await img2Resp.arrayBuffer();
+    const imgId = wb.addImage({ buffer: bufFrom(ab), extension: "png" });
+    ws2.addImage(imgId, { tl: { col: 0, row: 2 }, ext: { width: 1300, height: 520 } });
+  } else {
+    ws2.addRow([L.chartError]);
   }
 
-  // === 6️⃣ FORMATIONS COMPLÉMENTAIRES ==========================================
-  {
-    const title = "FORMATIONS COMPLÉMENTAIRES ENVISAGÉES";
-    const r = ws.getRow(row);
-    r.getCell(1).value = title;
-    r.font = { bold: true, size: 13 };
-    ws.mergeCells(row, 1, row, 4);
-    row += 2;
+  // === FEUILLE 3 : GRAPHIQUE FORMATEUR(S) ===
+  const ws3 = wb.addWorksheet(L.sheet3Title);
+  ws3.columns = Array.from({ length: 12 }, (_, i) => ({ header: "", key: `c${i + 1}`, width: 14 }));
+  const r3 = ws3.addRow([L.chartTrainerTitle]);
+  ws3.mergeCells(r3.number, 1, r3.number, 12);
+  r3.font = { bold: true, size: 13 };
 
-    const header = ws.getRow(row);
-    header.getCell(1).value = "Participant";
-    header.getCell(2).value = "Réponse";
-    header.font = { bold: true };
-    header.alignment = { horizontal: "center" };
-    row += 1;
+  const labelsForm = FORM_KEYS.map(k => L.labels[k.labelKey]);
+  const dataForm = formAvg.map(x => (x ?? 0));
+  const qcConf3 = {
+    type: "bar",
+    data: {
+      labels: labelsForm,
+      datasets: [
+        { label: L.avgLegend, data: dataForm, backgroundColor: "#f28e2b" },
+        {
+          type: "line",
+          label: L.targetLegend,
+          data: labelsForm.map(() => CIBLE),
+          borderColor: "#3b6fb6",
+          fill: false,
+        },
+      ],
+    },
+    options: {
+      plugins: { legend: { position: "bottom" } },
+      scales: { y: { min: 0, max: 4, title: { display: true, text: L.colMoyenne } } },
+    },
+  };
 
-    responses.forEach((resp: any, i: number) => {
-      const rr = ws.getRow(row);
-      rr.getCell(1).value = participants[i];
-      rr.getCell(2).value = resp.formationsComplementaires || "-";
-      rr.getCell(2).alignment = { wrapText: true };
-      row += 1;
-    });
-
-    ws.getColumn(1).width = 25;
-    ws.getColumn(2).width = 90;
-    row += 2;
+  const img3Resp = await fetch("https://quickchart.io/chart?width=1400&height=650", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ backgroundColor: "white", format: "png", chart: qcConf3 }),
+  });
+  if (img3Resp.ok) {
+    const ab = await img3Resp.arrayBuffer();
+    const imgId = wb.addImage({ buffer: bufFrom(ab), extension: "png" });
+    ws3.addImage(imgId, { tl: { col: 0, row: 2 }, ext: { width: 1300, height: 520 } });
+  } else {
+    ws3.addRow([L.chartError]);
   }
 
-  // === 7️⃣ TÉMOIGNAGES ========================================================
-  {
-    const title = "TÉMOIGNAGES DES PARTICIPANTS";
-    const r = ws.getRow(row);
-    r.getCell(1).value = title;
-    r.font = { bold: true, size: 13 };
-    ws.mergeCells(row, 1, row, 4);
-    row += 2;
+  // === FEUILLE 4 : CAMEMBERT ATTENTES ===
+  const ws4 = wb.addWorksheet(L.sheet4Title);
+  ws4.columns = Array.from({ length: 10 }, (_, i) => ({ header: "", key: `c${i + 1}`, width: 16 }));
+  const r4 = ws4.addRow([L.chartExpectationsTitle]);
+  ws4.mergeCells(r4.number, 1, r4.number, 10);
+  r4.font = { bold: true, size: 14 };
 
-    const header = ws.getRow(row);
-    header.getCell(1).value = "Participant";
-    header.getCell(2).value = "Témoignage";
-    header.font = { bold: true };
-    header.alignment = { horizontal: "center" };
-    row += 1;
+  const total = Math.max(1, countYes + countPart + countNo);
+  const pieConf = {
+    type: "pie",
+    data: {
+      labels: [L.no, L.yes],
+      datasets: [
+        {
+          data: [countNo + countPart, countYes],
+          backgroundColor: ["#ff2530", "#00ff2a"],
+        },
+      ],
+    },
+    options: {
+      plugins: {
+        legend: { position: "bottom" },
+        datalabels: { display: false },
+      },
+    },
+  };
 
-    responses.forEach((resp: any, i: number) => {
-      const rr = ws.getRow(row);
-      rr.getCell(1).value = participants[i];
-      rr.getCell(2).value = resp.temoignage || "-";
-      rr.getCell(2).alignment = { wrapText: true };
-      row += 1;
-    });
-
-    ws.getColumn(1).width = 25;
-    ws.getColumn(2).width = 90;
+  const img4Resp = await fetch("https://quickchart.io/chart?width=1100&height=600", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ backgroundColor: "white", format: "png", chart: pieConf }),
+  });
+  if (img4Resp.ok) {
+    const ab = await img4Resp.arrayBuffer();
+    const imgId = wb.addImage({ buffer: bufFrom(ab), extension: "png" });
+    ws4.addImage(imgId, { tl: { col: 0, row: 2 }, ext: { width: 1000, height: 500 } });
+  } else {
+    ws4.addRow([L.chartError]);
   }
 
-  // === 8️⃣ EXPORT ==============================================================
-  const buffer = await wb.xlsx.writeBuffer();
-  return new NextResponse(buffer, {
+  // === Envoi ===
+  const fileName = `${(form.title || "rapport")
+    .replace(/[^\p{L}\p{N}\-_. ]+/gu, "")
+    .replace(/\s+/g, "_")}_${lang.toUpperCase()}.xlsx`;
+
+  const out = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+  return new NextResponse(bufFrom(out), {
+    status: 200,
     headers: {
-      "Content-Disposition": `attachment; filename="evaluation-${form.title}.xlsx"`,
-      "Content-Type":
+      "content-type":
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "content-disposition": `attachment; filename="${fileName}"`,
     },
   });
 }
