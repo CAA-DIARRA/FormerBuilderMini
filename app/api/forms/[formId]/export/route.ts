@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import ExcelJS from "exceljs";
-import { getLabels } from "@/app/lib/labels";
+import { getLabels } from "../../../../lib/labels";
 
 const prisma = new PrismaClient();
 
