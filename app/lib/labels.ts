@@ -1,86 +1,106 @@
 // app/lib/labels.ts
-export type CritKey =
-  | "envAccueil" | "envLieu" | "envMateriel"
-  | "contAttentes" | "contUtiliteTravail" | "contExercices" | "contMethodologie" | "contSupports" | "contRythme" | "contGlobal"
-  | "formMaitrise" | "formCommunication" | "formClarte" | "formMethodo" | "formGlobal";
+type L = ReturnType<typeof getLabels>;
 
-type Crit = { key: CritKey; label: string };
+export function getLabels(lang: "fr" | "en") {
+  if (lang === "en") {
+    return {
+      sheet1Title: "SUMMARY",
+      sheet2Title: "CONTENT CHART",
+      sheet3Title: "TRAINER CHART",
+      sheet4Title: "EXPECTATIONS",
+      formSheetSubtitle: "Evaluation synthesis",
+      metaTrainer: "Trainer",
+      metaDate: "Date",
+      metaPlace: "Place",
+      colCritere: "Criterion",
+      colMoyenne: "Average",
+      colCible: "Target",
+      envTitle: "I. Training environment",
+      contTitle: "II. Training content",
+      formTitle: "III. Trainer(s)",
+      expectationsTitle: "PARTICIPANTS' EXPECTATIONS",
+      expHeader: "Did this training meet your expectations?",
+      yes: "YES",
+      no: "NO",
+      complementaryTitle: "Complementary trainings envisaged",
+      testimonialTitle: "Testimonials",
+      none: "(none)",
+      chartContentTitle: "Averages per content criterion",
+      chartTrainerTitle: "Averages per trainer criterion",
+      chartExpectationsTitle: "Did this training meet your expectations?",
+      avgLegend: "AVERAGE",
+      targetLegend: "TARGET",
+      chartError: "Chart generation failed",
+      labels: {
+        // ENV
+        envAccueil: "1. How did you find the welcome/reception?",
+        envLieu: "2. How did you find the training venue(s)?",
+        envMateriel: "3. How did you find the equipment provided?",
+        // CONTENT
+        contAttentes: "1. Does the content meet your expectations?",
+        contUtiliteTravail: "2. Is the content useful for your work?",
+        contExercices: "3. How did you find exercises/examples/videos?",
+        contMethodologie: "4. How did you find the training methodology?",
+        contSupports: "5. How did you find the training supports?",
+        contRythme: "6. How did you find the training pace?",
+        contGlobal: "Overall evaluation of the training",
+        // TRAINER
+        formMaitrise: "1. Subject mastery",
+        formCommunication: "2. Quality of communication",
+        formClarte: "3. Clarity of answers to questions",
+        formMethodo: "4. Mastery of training methodology",
+        formGlobal: "5. Overall trainer evaluation",
+      } as const,
+    };
+  }
 
-export type Labels = {
-  envTitle: string;
-  contTitle: string;
-  formTitle: string;
-  env: Crit[];
-  cont: Crit[];
-  form: Crit[];
-};
-
-const FR: Labels = {
-  envTitle: "I. L’environnement de la formation",
-  contTitle: "II. Le Contenu de la formation",
-  formTitle: "Le(s) Formateur(s)",
-  env: [
-    { key: "envAccueil", label: "1. Comment avez-vous trouvé l’Accueil ?" },
-    { key: "envLieu", label: "2. Comment avez-vous trouvé le(s) Lieu(x) de formation ?" },
-    { key: "envMateriel", label: "3. Comment avez-vous trouvé le Matériel mis à disposition ?" },
-  ],
-  cont: [
-    { key: "contAttentes", label: "1. Le contenu couvre-t-il vos attentes ?" },
-    { key: "contUtiliteTravail", label: "2. Le contenu est-il utile pour votre travail ?" },
-    { key: "contExercices", label: "3. Comment avez-vous trouvé les exercices / exemples / vidéos ?" },
-    { key: "contMethodologie", label: "4. Comment avez-vous trouvé la méthodologie utilisée pour la formation ?" },
-    { key: "contSupports", label: "5. Comment avez-vous trouvé les supports de la formation ?" },
-    { key: "contRythme", label: "6. Comment avez-vous trouvé le rythme de la formation ?" },
-    { key: "contGlobal", label: "7.Évaluation globale de la formation" },
-  ],
-  form: [
-    { key: "formMaitrise", label: "1. Maîtrise du sujet" },
-    { key: "formCommunication", label: "2. Qualité de communication" },
-    { key: "formClarte", label: "3. Clarté des réponses aux questions" },
-    { key: "formMethodo", label: "4. Maîtrise méthodologie de la formation" },
-    { key: "formGlobal", label: "5. Évaluation globale du formateur" },
-  ],
-};
-
-const EN: Labels = {
-  envTitle: "I. Training environment",
-  contTitle: "II. Training content",
-  formTitle: "Trainer(s)",
-  env: [
-    { key: "envAccueil", label: "1. How did you find the welcome/reception?" },
-    { key: "envLieu", label: "2. How did you find the training venue(s)?" },
-    { key: "envMateriel", label: "3. How did you find the equipment provided?" },
-  ],
-  cont: [
-    { key: "contAttentes", label: "1. Does the content meet your expectations?" },
-    { key: "contUtiliteTravail", label: "2. Is the content useful for your work?" },
-    { key: "contExercices", label: "3. How did you find the exercises / examples / videos?" },
-    { key: "contMethodologie", label: "4. How did you find the training methodology used?" },
-    { key: "contSupports", label: "5. How did you find the training materials?" },
-    { key: "contRythme", label: "6. How did you find the training pace?" },
-    { key: "contGlobal", label: "Overall evaluation of the training" },
-  ],
-  form: [
-    { key: "formMaitrise", label: "1. Mastery of the subject" },
-    { key: "formCommunication", label: "2. Quality of communication" },
-    { key: "formClarte", label: "3. Clarity of answers to questions" },
-    { key: "formMethodo", label: "4. Mastery of training methodology" },
-    { key: "formGlobal", label: "5. Overall evaluation of the trainer" },
-  ],
-};
-
-export function getLabels(lang: "fr" | "en" = "fr"): Labels {
-  return lang === "en" ? EN : FR;
+  return {
+    sheet1Title: "SYNTHÈSE",
+    sheet2Title: "GRAPHIQUE – CONTENU",
+    sheet3Title: "GRAPHIQUE – FORMATEUR",
+    sheet4Title: "ATTENTES",
+    formSheetSubtitle: "Synthèse d’évaluation",
+    metaTrainer: "Formateur",
+    metaDate: "Date",
+    metaPlace: "Lieu",
+    colCritere: "Critère",
+    colMoyenne: "Moyenne",
+    colCible: "Cible",
+    envTitle: "I. L’environnement de la formation",
+    contTitle: "II. Le contenu de la formation",
+    formTitle: "III. Le(s) formateur(s)",
+    expectationsTitle: "ATTENTES DES PARTICIPANTS",
+    expHeader: "Cette formation a-t-elle répondu à vos attentes ?",
+    yes: "OUI",
+    no: "NON",
+    complementaryTitle: "Formations complémentaires envisagées",
+    testimonialTitle: "Témoignages",
+    none: "(aucun)",
+    chartContentTitle: "Moyennes par critère de contenu",
+    chartTrainerTitle: "Moyennes par critère formateur",
+    chartExpectationsTitle: "Cette formation a-t-elle répondu à vos attentes ?",
+    avgLegend: "MOYENNE",
+    targetLegend: "CIBLE",
+    chartError: "Échec de génération du graphique",
+    labels: {
+      // ENV
+      envAccueil: "1. Comment avez-vous trouvé l’Accueil ?",
+      envLieu: "2. Comment avez-vous trouvé le(s) Lieu(x) de formation ?",
+      envMateriel: "3. Comment avez-vous trouvé le Matériel mis à disposition ?",
+      // CONTENT
+      contAttentes: "1. Le contenu couvre-t-il vos attentes ?",
+      contUtiliteTravail: "2. Le contenu est-il utile pour votre travail ?",
+      contExercices: "3. Comment avez-vous trouvé les exercices / exemples / vidéos ?",
+      contMethodologie: "4. Comment avez-vous trouvé la méthodologie utilisée pour la formation ?",
+      contSupports: "5. Comment avez-vous trouvé les supports de la formation ?",
+      contRythme: "6. Comment avez-vous trouvé le rythme de la formation ?",
+      contGlobal: "Évaluation globale de la formation",
+      // TRAINER
+      formMaitrise: "1. Maîtrise du sujet",
+      formCommunication: "2. Qualité de communication",
+      formClarte: "3. Clarté des réponses aux questions",
+      formMethodo: "4. Maîtrise méthodologie de la formation",
+      formGlobal: "5. Évaluation globale du formateur",
+    } as const,
+  };
 }
-
-// Cibles par langue et par section (modifiable)
-export const TARGETS = {
-  fr: { env: 2.5, cont: 2.5, form: 2.5 },
-  en: { env: 2.5, cont: 2.5, form: 2.5 },
-} as const;
-
-// Libellés de colonnes selon la langue
-export const COLS = {
-  fr: { critere: "Critère", moyenne: "Moyenne", cible: "Cible", participant: "Participant" },
-  en: { critere: "Criterion", moyenne: "Average", cible: "Target", participant: "Participant" },
-} as const;
