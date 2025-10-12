@@ -1,254 +1,222 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import ExcelJS from "exceljs";
-import { getLabels, TARGETS, COLS, CritKey } from "../../../../lib/labels";
 
 const prisma = new PrismaClient();
 
-/* -------------------- Helpers mise en forme -------------------- */
-
-const grayFill: ExcelJS.Fill = {
-  type: "pattern",
-  pattern: "solid",
-  fgColor: { argb: "FFEFEFEF" },
-};
-
-function writeGroupTitle(
-  ws: ExcelJS.Worksheet,
-  title: string,
-  colStart = 1,
-  colEnd = 3,
-  rowRef?: { value: number }
-) {
-  const r = rowRef ? rowRef.value : (ws as any)._currentRow || 1;
-  const row = ws.getRow(r);
-  row.getCell(colStart).value = title;
-  ws.mergeCells(r, colStart, r, colEnd);
-  row.font = { bold: true };
-  row.alignment = { vertical: "middle", horizontal: "left" };
-  row.fill = grayFill;
-  if (rowRef) rowRef.value++;
-  else (ws as any)._currentRow = r + 1;
-}
-
-function writeHeader(ws: ExcelJS.Worksheet, headers: string[], colStart = 1, rowRef?: { value: number }) {
-  const r = rowRef ? rowRef.value : (ws as any)._currentRow || 1;
-  const row = ws.getRow(r);
-  headers.forEach((h, i) => {
-    row.getCell(colStart + i).value = h;
-  });
-  row.font = { bold: true };
-  row.fill = grayFill;
-  if (rowRef) rowRef.value++;
-  else (ws as any)._currentRow = r + 1;
-}
-
-function writeMeanAt(
-  ws: ExcelJS.Worksheet,
-  colStart: number,
-  label: string,
-  mean: number | null,
-  target: number,
-  rowRef?: { value: number }
-) {
-  const r = rowRef ? rowRef.value : (ws as any)._currentRow || 1;
-  const row = ws.getRow(r);
-  row.getCell(colStart + 0).value = label;
-  row.getCell(colStart + 1).value = typeof mean === "number" ? Number(mean.toFixed(2)) : null;
-  row.getCell(colStart + 2).value = target;
-  if (rowRef) rowRef.value++;
-  else (ws as any)._currentRow = r + 1;
-}
-
-function initialsFrom(nom?: string | null, prenoms?: string | null) {
-  const n = (nom || "").trim();
-  const p = (prenoms || "").trim();
-  const take = (s: string) => (s ? s[0].toUpperCase() : "");
-  return `${take(p)}${take(n)}` || "—";
-}
-
-/* -------------------- Agrégations -------------------- */
-
-type Agg = Partial<Record<CritKey, number>>;
-
-function computeAgg(responses: any[]): Agg {
-  const keys: CritKey[] = [
-    "envAccueil", "envLieu", "envMateriel",
-    "contAttentes", "contUtiliteTravail", "contExercices", "contMethodologie", "contSupports", "contRythme", "contGlobal",
-    "formMaitrise", "formCommunication", "formClarte", "formMethodo", "formGlobal",
-  ];
-  const sums: Record<string, number> = {};
-  const counts: Record<string, number> = {};
-  for (const r of responses) {
-    for (const k of keys) {
-      const v = r[k as keyof typeof r];
-      if (typeof v === "number") {
-        sums[k] = (sums[k] || 0) + v;
-        counts[k] = (counts[k] || 0) + 1;
-      }
-    }
-  }
-  const out: Agg = {};
-  for (const k of keys) {
-    if (counts[k] > 0) out[k] = sums[k] / counts[k];
-  }
-  return out;
-}
-
-/* -------------------- Handler -------------------- */
-
 export async function GET(req: Request, { params }: { params: { formId: string } }) {
-  try {
-    const url = new URL(req.url);
-    const lang = (url.searchParams.get("lang") === "en" ? "en" : "fr") as "fr" | "en";
-    const LABELS = getLabels(lang);
-    const TARGET = TARGETS[lang];
-    const C = COLS[lang];
+  const { formId } = params;
+  const url = new URL(req.url);
+  const lang = url.searchParams.get("lang") === "en" ? "en" : "fr";
 
-    // Charge form + réponses
-    const form = await prisma.form.findUnique({ where: { id: params.formId } });
-    if (!form) return NextResponse.json({ error: "Form not found" }, { status: 404 });
+  // 1️⃣ Récupération du formulaire et des réponses
+  const form = await prisma.form.findUnique({ where: { id: formId } });
+  if (!form) return NextResponse.json({ error: "Form not found" }, { status: 404 });
 
-    const responses = await prisma.response.findMany({
-      where: { formId: params.formId },
-      orderBy: { submittedAt: "asc" },
-    });
+  const responses = await prisma.response.findMany({ where: { formId } });
+  if (!responses.length)
+    return NextResponse.json({ error: "No responses found" }, { status: 404 });
 
-    const agg = computeAgg(responses);
+  // 2️⃣ Prépare le classeur Excel
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("SYNTHÈSE");
 
-    // Workbook
-    const wb = new ExcelJS.Workbook();
-    const wsName = lang === "fr" ? "SYNTHÈSE" : "SUMMARY";
-    const ws = wb.addWorksheet(wsName);
+  // Style générique
+  const grayFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEEEEE" } };
 
-    // Largeurs de colonnes (droite D-F)
-    ws.getColumn(4).width = 36; // D = Critère
-    ws.getColumn(5).width = 14; // E = Moyenne
-    ws.getColumn(6).width = 12; // F = Cible
+  // === OUTILS ===
+  const writeGroupTitle = (ws: ExcelJS.Worksheet, title: string) => {
+    const row = ws.addRow([title]);
+    row.font = { bold: true, size: 13 };
+    ws.mergeCells(row.number, 1, row.number, 5);
+  };
 
-    // ---- En-tête infos formation (haut de page, colonnes A..C)
-    ws.getColumn(1).width = 20;
-    ws.getColumn(2).width = 45;
-    ws.getColumn(3).width = 20;
+  const writeRow = (ws: ExcelJS.Worksheet, label: string, vals: any[]) => {
+    const row = ws.addRow([label, ...vals]);
+    row.getCell(1).alignment = { vertical: "middle", horizontal: "left" };
+    row.alignment = { vertical: "middle", horizontal: "center" };
+  };
 
-    let row = 1;
-
-    const title = lang === "fr" ? "Synthèse d’évaluation de formation" : "Training evaluation summary";
-    ws.mergeCells(row, 1, row, 6);
-    ws.getRow(row).getCell(1).value = title;
-    ws.getRow(row).font = { size: 14, bold: true };
-    row += 2;
-
-    // Détails formation
-    const labelTitle = lang === "fr" ? "Intitulé de la formation" : "Course title";
-    const labelTrainer = lang === "fr" ? "Formateur" : "Trainer";
-    const labelDate = lang === "fr" ? "Date" : "Date";
-    const labelPlace = lang === "fr" ? "Lieu" : "Place";
-
-    ws.getRow(row).getCell(1).value = labelTitle;
-    ws.getRow(row).getCell(2).value = form.title;
-    row++;
-    ws.getRow(row).getCell(1).value = labelTrainer;
-    ws.getRow(row).getCell(2).value = (form as any).trainerName || "";
-    row++;
-    ws.getRow(row).getCell(1).value = labelDate;
-    ws.getRow(row).getCell(2).value = form.sessionDate ? new Date(form.sessionDate).toLocaleDateString() : "";
-    row++;
-    ws.getRow(row).getCell(1).value = labelPlace;
-    ws.getRow(row).getCell(2).value = (form as any).location || "";
-    row += 2;
-
-    /* ============================
-       BLOCS DE DROITE (D–F)
-       Empilés verticalement : Environnement, Contenu, Formateur(s)
-    ============================ */
-    const right = { value: 2 }; // ligne de départ pour les blocs de droite
-
-    // 1) Environnement
-    writeGroupTitle(ws, LABELS.envTitle, 4, 6, right);
-    writeHeader(ws, [C.critere, C.moyenne, C.cible], 4, right);
-    LABELS.env.forEach(r => {
-      const mean = agg[r.key as keyof Agg] ?? null;
-      writeMeanAt(ws, 4, r.label, mean as number | null, TARGET.env, right);
-    });
-    right.value++; // espace
-
-    // 2) Contenu
-    writeGroupTitle(ws, LABELS.contTitle, 4, 6, right);
-    writeHeader(ws, [C.critere, C.moyenne, C.cible], 4, right);
-    LABELS.cont.forEach(r => {
-      const mean = agg[r.key as keyof Agg] ?? null;
-      writeMeanAt(ws, 4, r.label, mean as number | null, TARGET.cont, right);
-    });
-    right.value++;
-
-    // 3) Formateur(s)
-    writeGroupTitle(ws, LABELS.formTitle, 4, 6, right);
-    writeHeader(ws, [C.critere, C.moyenne, C.cible], 4, right);
-    LABELS.form.forEach(r => {
-      const mean = agg[r.key as keyof Agg] ?? null;
-      writeMeanAt(ws, 4, r.label, mean as number | null, TARGET.form, right);
-    });
-    right.value++;
-
-    /* ============================
-       RÉPONSES PAR PARTICIPANT (INITIALS)
-       — Table dynamique en bas, colonnes A..(selon nb de critères)
-    ============================ */
-    row = Math.max(row, right.value + 1);
-
-    const partTitle = lang === "fr"
-      ? "Réponses par participant (initiales)"
-      : "Responses per participant (initials)";
-    writeGroupTitle(ws, partTitle, 1, 6, { value: row });
-    row++;
-
-    const crits = [
-      ...getLabels(lang).env,
-      ...getLabels(lang).cont,
-      ...getLabels(lang).form,
-    ];
-    const headers = [COLS[lang].participant, ...crits.map(c => c.label)];
-
-    // Colonnes autos (un peu larges pour lisibilité)
-    ws.getColumn(1).width = 16;
-    for (let i = 0; i < crits.length; i++) {
-      ws.getColumn(2 + i).width = 14;
-    }
-
-    const tableRef = `A${row}`;
-    const rows = responses.map((r: any) => {
-      const sigle = initialsFrom(r.participantNom, r.participantPrenoms);
-      const notes = crits.map(c => {
-        const v = r[c.key as keyof typeof r];
-        return typeof v === "number" ? v : null;
-      });
-      return [sigle, ...notes];
-    });
-
-    ws.addTable({
-      name: `T_PARTICIPANTS_${Date.now()}`,
-      ref: tableRef,
-      headerRow: true,
-      style: { theme: "TableStyleMedium2", showRowStripes: true },
-      columns: headers.map(h => ({ name: h })),
-      rows,
-    });
-
-    // Fichier
-    const filename = `${(form.slug || "form")}_${lang.toUpperCase()}.xlsx`;
-    const arrayBuffer = await wb.xlsx.writeBuffer();
-    const buff = Buffer.from(arrayBuffer as ArrayBuffer);
-
-    return new NextResponse(buff, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="${filename}"`,
-      },
-    });
-  } catch (e: any) {
-    console.error("EXPORT ERROR", e);
-    return NextResponse.json({ error: e?.message || "Export failed" }, { status: 500 });
+  // === 3️⃣ CALCUL MOYENNES ===
+  function avg(key: keyof any) {
+    const arr = responses.map((r: any) => r[key]);
+    const valid = arr.filter((x: any) => typeof x === "number");
+    return valid.length ? (valid.reduce((a: number, b: number) => a + b, 0) / valid.length) : null;
   }
+
+  const envQuestions = [
+    ["1. Comment avez-vous trouvé l'Accueil ?", "envAccueil"],
+    ["2. Comment avez-vous trouvé le(s) Lieu(x) de formation ?", "envLieu"],
+    ["3. Comment avez-vous trouvé le Matériel mis à disposition ?", "envMateriel"]
+  ];
+  const contQuestions = [
+    ["1. Le contenu couvre-t-il vos attentes ?", "contAttentes"],
+    ["2. Le contenu est-il utile pour votre travail ?", "contUtiliteTravail"],
+    ["3. Comment avez-vous trouvé les exercices / exemples / vidéos ?", "contExercices"],
+    ["4. Comment avez-vous trouvé la méthodologie utilisée ?", "contMethodologie"],
+    ["5. Comment avez-vous trouvé les supports de la formation ?", "contSupports"],
+    ["6. Comment avez-vous trouvé le rythme de la formation ?", "contRythme"],
+    ["Évaluation globale de la formation", "contGlobal"]
+  ];
+  const formQuestions = [
+    ["1. Maîtrise du sujet", "formMaitrise"],
+    ["2. Qualité de communication", "formCommunication"],
+    ["3. Clarté des réponses aux questions", "formClarte"],
+    ["4. Maîtrise méthodologie de la formation", "formMethodo"],
+    ["5. Évaluation globale du formateur", "formGlobal"]
+  ];
+
+  const participants = responses.map((r, i) => {
+    const nom = (r.participantNom ?? "").trim().toUpperCase();
+    const pre = (r.participantPrenoms ?? "").trim();
+    if (!nom && !pre) return `P${i + 1}`;
+    return `${pre ? pre[0].toUpperCase() + pre.slice(1) : ""} ${nom}`;
+  });
+
+  // === 4️⃣ TABLEAU SYNTHÈSE ====================================================
+  writeGroupTitle(ws, "I. L’environnement de la formation");
+  ws.addRow(["Critère", ...participants, "Moyenne", "Cible"]);
+  envQuestions.forEach(([label, key]) => {
+    const vals = responses.map((r: any) => r[key] ?? "");
+    const moy = avg(key as any);
+    ws.addRow([label, ...vals, moy?.toFixed(2) ?? "-", 2.5]);
+  });
+  ws.addRow([]);
+
+  writeGroupTitle(ws, "II. Le Contenu de la formation");
+  ws.addRow(["Critère", ...participants, "Moyenne", "Cible"]);
+  contQuestions.forEach(([label, key]) => {
+    const vals = responses.map((r: any) => r[key] ?? "");
+    const moy = avg(key as any);
+    ws.addRow([label, ...vals, moy?.toFixed(2) ?? "-", 2.5]);
+  });
+  ws.addRow([]);
+
+  writeGroupTitle(ws, "III. Le(s) Formateur(s)");
+  ws.addRow(["Critère", ...participants, "Moyenne", "Cible"]);
+  formQuestions.forEach(([label, key]) => {
+    const vals = responses.map((r: any) => r[key] ?? "");
+    const moy = avg(key as any);
+    ws.addRow([label, ...vals, moy?.toFixed(2) ?? "-", 2.5]);
+  });
+
+  // === 5️⃣ TABLEAU ATTENTE DES PARTICIPANTS ====================================
+  let row = (ws.lastRow?.number ?? 0) + 2;
+  const colStart = 1;
+
+  {
+    const title = "ATTENTE DES PARTICIPANTS";
+    const r = ws.getRow(row);
+    r.getCell(colStart).value = title;
+    r.font = { bold: true, size: 13 };
+    const width = 1 + participants.length + 1;
+    ws.mergeCells(row, colStart, row, colStart + width - 1);
+    row += 2;
+
+    const sub = ws.getRow(row);
+    sub.getCell(colStart).value = "Cette formation a-t-elle répondu à vos attentes ?";
+    sub.font = { italic: true };
+    ws.mergeCells(row, colStart, row, colStart + width - 1);
+    row += 1;
+
+    const header = ws.getRow(row);
+    header.getCell(colStart).value = "Réponse";
+    participants.forEach((name, i) => {
+      header.getCell(colStart + 1 + i).value = name;
+    });
+    header.getCell(colStart + 1 + participants.length).value = "%";
+    header.font = { bold: true };
+    header.alignment = { horizontal: "center" };
+    row += 1;
+
+    const lines = [
+      { key: "OUI", label: "OUI", count: 0 },
+      { key: "NON", label: "NON", count: 0 }
+    ];
+
+    lines.forEach((line) => {
+      const rr = ws.getRow(row);
+      rr.getCell(colStart).value = line.label;
+      participants.forEach((_, i) => {
+        const val = (responses[i].reponduAttentes ?? "").toUpperCase();
+        const hit = val === line.key ? 1 : "";
+        if (hit === 1) line.count += 1;
+        rr.getCell(colStart + 1 + i).value = hit;
+        rr.getCell(colStart + 1 + i).alignment = { horizontal: "center" };
+      });
+      const pct = Math.round((line.count / responses.length) * 100);
+      rr.getCell(colStart + 1 + participants.length).value = `${pct}%`;
+      rr.getCell(colStart + 1 + participants.length).alignment = { horizontal: "center" };
+      row += 1;
+    });
+
+    row += 2;
+  }
+
+  // === 6️⃣ FORMATIONS COMPLÉMENTAIRES ==========================================
+  {
+    const title = "FORMATIONS COMPLÉMENTAIRES ENVISAGÉES";
+    const r = ws.getRow(row);
+    r.getCell(1).value = title;
+    r.font = { bold: true, size: 13 };
+    ws.mergeCells(row, 1, row, 4);
+    row += 2;
+
+    const header = ws.getRow(row);
+    header.getCell(1).value = "Participant";
+    header.getCell(2).value = "Réponse";
+    header.font = { bold: true };
+    header.alignment = { horizontal: "center" };
+    row += 1;
+
+    responses.forEach((resp: any, i: number) => {
+      const rr = ws.getRow(row);
+      rr.getCell(1).value = participants[i];
+      rr.getCell(2).value = resp.formationsComplementaires || "-";
+      rr.getCell(2).alignment = { wrapText: true };
+      row += 1;
+    });
+
+    ws.getColumn(1).width = 25;
+    ws.getColumn(2).width = 90;
+    row += 2;
+  }
+
+  // === 7️⃣ TÉMOIGNAGES ========================================================
+  {
+    const title = "TÉMOIGNAGES DES PARTICIPANTS";
+    const r = ws.getRow(row);
+    r.getCell(1).value = title;
+    r.font = { bold: true, size: 13 };
+    ws.mergeCells(row, 1, row, 4);
+    row += 2;
+
+    const header = ws.getRow(row);
+    header.getCell(1).value = "Participant";
+    header.getCell(2).value = "Témoignage";
+    header.font = { bold: true };
+    header.alignment = { horizontal: "center" };
+    row += 1;
+
+    responses.forEach((resp: any, i: number) => {
+      const rr = ws.getRow(row);
+      rr.getCell(1).value = participants[i];
+      rr.getCell(2).value = resp.temoignage || "-";
+      rr.getCell(2).alignment = { wrapText: true };
+      row += 1;
+    });
+
+    ws.getColumn(1).width = 25;
+    ws.getColumn(2).width = 90;
+  }
+
+  // === 8️⃣ EXPORT ==============================================================
+  const buffer = await wb.xlsx.writeBuffer();
+  return new NextResponse(buffer, {
+    headers: {
+      "Content-Disposition": `attachment; filename="evaluation-${form.title}.xlsx"`,
+      "Content-Type":
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    },
+  });
 }
