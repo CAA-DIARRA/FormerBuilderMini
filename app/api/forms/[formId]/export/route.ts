@@ -48,8 +48,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const form = await prisma.form.findUnique({ where: { id: params.formId } });
     if (!form) return NextResponse.json({ error: "Form not found" }, { status: 404 });
 
-    // --- Réponses
-    // On ne dépend PAS d'un champ JSON unique (select) — on prend les colonnes existantes du modèle Response
+    // --- Réponses (on mappe chaque colonne explicitement)
     const raw = await prisma.response.findMany({
       where: { formId: form.id },
       orderBy: { id: "asc" }, // tri stable
@@ -92,7 +91,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const grayFill = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFEFEFEF" } };
     const headerFill = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FF1A73E8" } };
     const white = { argb: "FFFFFFFF" };
-    const cible = 2.5; // cible (peut être rendue dynamique plus tard)
+    const cible = 2.5; // cible (peut devenir dynamique par langue si tu veux)
 
     // ===============================
     // FEUILLE 1 — SYNTHÈSE (tableaux)
@@ -143,10 +142,18 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       widths.forEach((w, i) => (ws1.getColumn(i + 1).width = w));
     };
 
+    // calc moyenne sûre (on enlève les null)
+    const meanOf = (vals: Array<number | null>) => {
+      const nums = vals.filter((v): v is number => typeof v === "number");
+      if (nums.length === 0) return null;
+      const sum = nums.reduce((a, b) => a + b, 0);
+      return sum / nums.length;
+    };
+
     function writeCriteriaBlock(rows: ReadonlyArray<{ key: string; label: string }>) {
       rows.forEach((r) => {
         const vals = participants.map((p) => (p[r.key as keyof RespRow] ?? null) as number | null);
-        const avg = vals.length ? vals.reduce((s, v) => s + (Number(v) || 0), 0) / vals.length : null;
+        const avg = meanOf(vals);
         ws1.addRow([r.label, ...vals, avg, cible]);
       });
       ws1.addRow([]);
@@ -230,7 +237,8 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const contLabels = L.contRows.map((r) => r.label);
     const contAvgs = contKeys.map((k) => {
       const vals = participants.map((p) => (p[k as keyof RespRow] as number | null) ?? null);
-      return vals.length ? vals.reduce((s, v) => s + (Number(v) || 0), 0) / vals.length : 0;
+      const nums = vals.filter((v): v is number => typeof v === "number");
+      return nums.length ? nums.reduce((s, v) => s + v, 0) / nums.length : 0;
     });
 
     const chartCfg1 = {
@@ -272,7 +280,8 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const formLabels = L.formRows.map((r) => r.label);
     const formAvgs = formKeys.map((k) => {
       const vals = participants.map((p) => (p[k as keyof RespRow] as number | null) ?? null);
-      return vals.length ? vals.reduce((s, v) => s + (Number(v) || 0), 0) / vals.length : 0;
+      const nums = vals.filter((v): v is number => typeof v === "number");
+      return nums.length ? nums.reduce((s, v) => s + v, 0) / nums.length : 0;
     });
 
     const chartCfg2 = {
