@@ -1,146 +1,45 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import ExcelJS from "exceljs";
-import { LABELS} from "../../../../lib/labels"; // { fr: {...}, en: {...} }
+import { Buffer } from "buffer";
+import { LABELS } from "../../../../lib/labels"; // chemin : app/api/forms/[formId]/export -> app/lib
 
 const prisma = new PrismaClient();
 
-// --- configuration des sections/clefs utilisées dans les réponses --- //
-const CONTENT_KEYS = [
-  { key: "contAttentes",      id: "content_expectations" },
-  { key: "contUtiliteTravail",id: "content_useful" },
-  { key: "contExercices",     id: "content_exercises" },
-  { key: "contMethodologie",  id: "content_method" },
-  { key: "contSupports",      id: "content_materials" },
-  { key: "contRythme",        id: "content_rhythm" },
-  { key: "contGlobal",        id: "content_overall" },
-] as const;
+type Resp = { data: Record<string, any>; createdAt: Date };
 
-const TRAINER_KEYS = [
-  { key: "formMaitrise",      id: "trainer_mastery" },
-  { key: "formCommunication", id: "trainer_comm" },
-  { key: "formClarte",        id: "trainer_clarity" },
-  { key: "formMethodo",       id: "trainer_method" },
-  { key: "formGlobal",        id: "trainer_overall" },
-] as const;
-
-type Resp = {
-  data: Record<string, any>;
-  createdAt: Date;
-};
+function bufFrom(ab: ArrayBuffer) {
+  return Buffer.from(new Uint8Array(ab));
+}
 
 function avg(nums: number[]) {
-  const arr = nums.filter((n) => typeof n === "number" && !Number.isNaN(n));
-  if (!arr.length) return null;
-  return Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 10) / 10;
+  const vals = nums.filter((n) => Number.isFinite(n));
+  if (!vals.length) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
-function toNum(v: any): number | null {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+function solidGrayFill(): any {
+  return { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFEFEF" } } as any;
 }
 
-function yesNoCounts(values: (string | null | undefined)[]) {
-  const total = values.length || 1;
-  const yes = values.filter((v) => (v ?? "").toString().toUpperCase() === "OUI").length;
-  const no = values.filter((v) => (v ?? "").toString().toUpperCase() === "NON").length;
-  return {
-    yes,
-    no,
-    yesPct: Math.round((yes / total) * 100),
-    noPct: Math.round((no / total) * 100),
-  };
+function bold(ws: ExcelJS.Worksheet, row: number) {
+  ws.getRow(row).font = { bold: true };
 }
 
-function buildQCBarConfig(labels: string[], values: number[], target = 2.5, title = "") {
-  return {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [
-        {
-          label: "MOYENNE",
-          data: values,
-          backgroundColor: "#5B9BD5",
-        },
-      ],
-    },
-    options: {
-      plugins: {
-        title: { display: !!title, text: title, font: { size: 18, weight: "bold" } },
-        legend: { display: true, position: "bottom" },
-        annotation: {
-          annotations: {
-            target: {
-              type: "line",
-              yMin: target,
-              yMax: target,
-              borderColor: "#69B34C",
-              borderWidth: 2,
-              label: {
-                display: true,
-                content: "CIBLE",
-                position: "end",
-                backgroundColor: "rgba(0,0,0,0)",
-                color: "#69B34C",
-              },
-            },
-          },
-        },
-        datalabels: {
-          color: "#000",
-          anchor: "end",
-          align: "start",
-          formatter: (v: any) => (typeof v === "number" ? v.toFixed(1) : ""),
-          font: { weight: "bold", size: 14 },
-        },
-      },
-      responsive: true,
-      scales: {
-        y: { suggestedMin: 0, suggestedMax: 3.5, title: { display: true, text: "Note" } },
-        x: { ticks: { maxRotation: 0, minRotation: 0 } },
-      },
-    },
-    plugins: ["chartjs-plugin-annotation", "chartjs-plugin-datalabels"],
-  };
+function autoOutline(ws: ExcelJS.Worksheet, r1: number, c1: number, r2: number, c2: number) {
+  for (let r = r1; r <= r2; r++) {
+    for (let c = c1; c <= c2; c++) {
+      ws.getCell(r, c).border = {
+        top: { style: "thin" },
+        bottom: { style: "thin" },
+        left: { style: "thin" },
+        right: { style: "thin" },
+      };
+    }
+  }
 }
 
-function buildQCPie(title: string, yesPct: number, noPct: number) {
-  return {
-    type: "pie",
-    data: {
-      labels: ["NON", "OUI"],
-      datasets: [
-        {
-          data: [noPct, yesPct],
-          backgroundColor: ["#FF0000", "#00FF00"],
-        },
-      ],
-    },
-    options: {
-      plugins: {
-        title: { display: true, text: title, font: { size: 22, weight: "bold" } },
-        legend: { display: true, position: "bottom" },
-        datalabels: {
-          color: (ctx: any) => (ctx.dataIndex === 0 ? "#d00" : "#030"),
-          formatter: (value: number) => `${value}%`,
-          font: { weight: "bold", size: 16 },
-        },
-      },
-    },
-    plugins: ["chartjs-plugin-datalabels"],
-  };
-}
-
-function quickChartUrl(cfg: object, w = 1200, h = 500) {
-  const enc = encodeURIComponent(JSON.stringify(cfg));
-  return `https://quickchart.io/chart?width=${w}&height=${h}&format=png&c=${enc}`;
-}
-
-export async function GET(
-  req: Request,
-  { params }: { params: { formId: string } }
-) {
+export async function GET(req: NextRequest, { params }: { params: { formId: string } }) {
   try {
     const url = new URL(req.url);
     const lang = (url.searchParams.get("lang") === "en" ? "en" : "fr") as "fr" | "en";
@@ -148,203 +47,264 @@ export async function GET(
 
     const form = await prisma.form.findUnique({ where: { id: params.formId } });
     if (!form) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Form not found" }, { status: 404 });
     }
 
-    const records = (await prisma.response.findMany({
+    // On ne sélectionne que ce qu’on utilise et on mappe vers Resp pour éviter l’erreur TS
+    const raw = await prisma.response.findMany({
       where: { formId: form.id },
       orderBy: { createdAt: "asc" },
       select: { data: true, createdAt: true },
-    })) as Resp[];
+    });
+    const responses: Resp[] = raw.map((r: any) => ({ data: r.data, createdAt: r.createdAt }));
 
-    // --- Préparation des valeurs numériques --- //
-    const contentCols = CONTENT_KEYS.map(k =>
-      records.map(r => toNum(r.data?.[k.key]))
-    );
-    const trainerCols = TRAINER_KEYS.map(k =>
-      records.map(r => toNum(r.data?.[k.key]))
-    );
-    const contentAvg = contentCols.map(col => avg(col as number[]));
-    const trainerAvg = trainerCols.map(col => avg(col as number[]));
-    const cible = 2.5;
+    // Prépare clés/labels des sections (tirés de LABELS)
+    const envRows = L.envRows;   // [{key,label}, ...]
+    const contRows = L.contRows;
+    const formRows = L.formRows;
+    const allCriteria = [...envRows, ...contRows, ...formRows].map((r) => r.key);
 
-    // --- Excel --- //
+    // Helper pour lire une valeur numérique dans une réponse
+    const num = (d: Record<string, any>, key: string) => {
+      const v = d?.[key];
+      const n = Number(v);
+      return Number.isFinite(n) ? n : NaN;
+    };
+
+    // 1) Workbook
     const wb = new ExcelJS.Workbook();
-    wb.creator = "FormerBuilder";
-    wb.created = new Date();
 
-    // ---------- FEUILLE 1 : SYNTHÈSE ---------- //
+    // ========= Feuille 1 : Synthèse / Summary =========
     const ws1 = wb.addWorksheet(L.sheet1Title);
+    ws1.properties.defaultRowHeight = 18;
 
-    // entête
+    // Largeur basique (les colonnes des participants vont s’ajouter dynamiquement)
     ws1.columns = [
-      { header: "", key: "c1", width: 36 },
-      // colonnes pour chaque participant
-      ...records.map((_, i) => ({ header: `${L.participant} ${i + 1}`, key: `p${i + 1}`, width: 14 })),
-      { header: L.avg, key: "avg", width: 14 },
-      { header: L.target, key: "tgt", width: 10 },
+      { header: L.criteriaHeader, key: "crit", width: 50 }, // Col 1
+      // colonnes participants (2..N+1)
+      // col moyenne, col cible
     ];
 
-    // Titre
-    ws1.mergeCells(1, 1, 1, ws1.columnCount);
-    ws1.getRow(1).values = [`${form.title} — ${L.sheet1Title}`];
-    ws1.getRow(1).font = { size: 14, bold: true };
-    ws1.addRow([]);
-
-    // A. Infos formation (optionnel – si des champs existent)
-    const meta = [
-      [L.sessionDate, form["sessionDate"] ? new Date(form["sessionDate"]).toLocaleDateString() : ""],
-      [L.location, form["location"] ?? ""],
-      [L.trainerName, form["trainerName"] ?? ""],
-    ];
-    meta.forEach(([k, v]) => ws1.addRow([k as string, v as string]));
-
-    ws1.addRow([]);
-    // B. Environnement (si tu veux ajouter, garder structure)
-    ws1.addRow([L.envTitle]).font = { bold: true };
-    ws1.addRow([]);
-    // C. Contenu – tableau dynamique avec valeurs par participant + moyenne + cible
-    ws1.addRow([L.contTitle]).font = { bold: true };
-    ws1.addRow([L.scaleLegend]);
-    // entête “Critère | P1 … Pn | Moyenne | Cible”
-    ws1.addRow([L.criteria, ...records.map((_, i) => `${L.participantShort} ${i + 1}`), L.avg, L.target]).font = { bold: true };
-
-    CONTENT_KEYS.forEach((k, idx) => {
-      const label = L.content[k.id];
-      const row = [
-        label,
-        ...contentCols[idx].map(v => (v ?? "")),
-        contentAvg[idx] ?? "",
-        cible,
-      ];
-      ws1.addRow(row);
-    });
-
-    ws1.addRow([]);
-
-    // D. Formateur – tableau dynamique
-    ws1.addRow([L.formTitle]).font = { bold: true };
-    ws1.addRow([L.scaleLegend]);
-    ws1.addRow([L.criteria, ...records.map((_, i) => `${L.participantShort} ${i + 1}`), L.avg, L.target]).font = { bold: true };
-
-    TRAINER_KEYS.forEach((k, idx) => {
-      const label = L.trainer[k.id];
-      const row = [
-        label,
-        ...trainerCols[idx].map(v => (v ?? "")),
-        trainerAvg[idx] ?? "",
-        cible,
-      ];
-      ws1.addRow(row);
-    });
-
-    ws1.addRow([]);
-
-    // E. Attentes des participants (tableau)
-    const attentes = records.map(r => (r.data?.reponduAttentes ?? "").toString().toUpperCase());
-    const att = yesNoCounts(attentes);
-    ws1.addRow([L.attentesTitle]).font = { bold: true };
-    ws1.addRow([L.attentesQuestion]).font = { italic: true };
-    const headAtt = [L.oui, ...records.map((_, i) => `${L.participantShort} ${i + 1}`), "%"];
-    ws1.addRow(headAtt).font = { bold: true };
-    ws1.addRow([
-      L.oui,
-      ...attentes.map(v => (v === "OUI" ? 1 : "")),
-      `${att.yesPct}%`,
-    ]);
-    ws1.addRow([
-      L.non,
-      ...attentes.map(v => (v === "NON" ? 1 : "")),
-      `${att.noPct}%`,
-    ]);
-    ws1.addRow([]);
-
-    // F. Formations complémentaires (liste)
-    ws1.addRow([L.complementTitle]).font = { bold: true };
-    const list1 = records
-      .map((r, i) => [ `${L.participantShort} ${i + 1}`, (r.data?.formationsComplementaires ?? "").toString().trim() ])
-      .filter(([, txt]) => txt.length > 0);
-    if (list1.length) {
-      ws1.addRow([L.participant, L.response]).font = { bold: true };
-      list1.forEach(row => ws1.addRow(row));
-    } else {
-      ws1.addRow([L.none]);
+    const n = responses.length;
+    // Insère des colonnes participants
+    for (let i = 0; i < n; i++) {
+      ws1.columns!.push({ header: `${L.participantShort} ${i + 1}`, key: `p${i + 1}`, width: 12 });
     }
-    ws1.addRow([]);
+    // Ajoute moyenne + cible
+    ws1.columns!.push({ header: L.averageHeader, key: "avg", width: 12 });
+    ws1.columns!.push({ header: L.targetHeader, key: "target", width: 12 });
 
-    // G. Témoignages (liste)
-    ws1.addRow([L.testimonyTitle]).font = { bold: true };
-    const list2 = records
-      .map((r, i) => [ `${L.participantShort} ${i + 1}`, (r.data?.temoignage ?? "").toString().trim() ])
-      .filter(([, txt]) => txt.length > 0);
-    if (list2.length) {
-      ws1.addRow([L.participant, L.response]).font = { bold: true };
-      list2.forEach(row => ws1.addRow(row));
-    } else {
-      ws1.addRow([L.none]);
+    // En-tête de la feuille (titre + infos)
+    let r = 1;
+    ws1.mergeCells(r, 1, r, Math.max(4, 2 + n + 2));
+    ws1.getCell(r, 1).value = `${L.reportTitle} — ${form.title}`;
+    ws1.getCell(r, 1).font = { bold: true, size: 14 };
+    r += 2;
+
+    // Sous-titre formation
+    ws1.addRow([`${L.trainer}: ${form.trainerName ?? ""}`]); r++;
+    ws1.addRow([`${L.date}: ${form.sessionDate ? new Date(form.sessionDate).toLocaleDateString() : ""}`]); r++;
+    ws1.addRow([`${L.location}: ${form.location ?? ""}`]); r++;
+    r += 1;
+
+    // Bloc ENVIRONNEMENT
+    const groupTitle = (title: string) => {
+      ws1.addRow([title]);
+      const rr = ws1.lastRow!;
+      ws1.mergeCells(rr.number, 1, rr.number, Math.max(4, 2 + n + 2));
+      rr.font = { bold: true };
+      rr.fill = solidGrayFill();
+    };
+
+    const writeCriteriaBlock = (rows: { key: string; label: string }[]) => {
+      for (const row of rows) {
+        // construit la ligne : [label, p1, p2, ..., avg, target]
+        const vals: (string | number | null)[] = [row.label];
+        const nums: number[] = [];
+        for (let i = 0; i < n; i++) {
+          const v = num(responses[i]?.data ?? {}, row.key);
+          vals.push(Number.isFinite(v) ? v : "");
+          if (Number.isFinite(v)) nums.push(v);
+        }
+        const m = avg(nums);
+        vals.push(m !== null ? Number(m.toFixed(2)) : "");
+        vals.push(2.5); // cible fixe
+        ws1.addRow(vals as any);
+      }
+    };
+
+    groupTitle(L.envTitle);
+    writeCriteriaBlock(envRows);
+
+    groupTitle(L.contTitle);
+    writeCriteriaBlock(contRows);
+
+    groupTitle(L.formTitle);
+    writeCriteriaBlock(formRows);
+
+    // Bordures sur le grand tableau (du premier critère jusqu’au dernier)
+    // On considère que le tableau commence 4 lignes après le titre principal
+    // On retrouve la 1ère ligne de groupe (environnement) en recherchant le label
+    // Simplicité : on met les bordures sur tout depuis la 1ère ligne après les infos (rInfoStart) jusqu’à la dernière ligne écrite.
+    const firstDataRow = 1 + 2 + 3 + 1 + 1; // approx : (titre) + (2) + (3 infos) + (1 blank) + (groupTitle ligne)
+    autoOutline(ws1, firstDataRow, 1, ws1.lastRow!.number, 1 + n + 2);
+
+    r = ws1.lastRow!.number + 2;
+
+    // Tableau ATTENTES
+    ws1.addRow([L.expectationsTitle]); bold(ws1, ws1.lastRow!.number);
+    const attRowStart = ws1.lastRow!.number + 1;
+
+    const attKeys = ["OUI", "PARTIELLEMENT", "NON"];
+    const attMap = new Map<string, number>();
+    for (const k of attKeys) attMap.set(k, 0);
+    for (const resp of responses) {
+      const v = (resp.data?.reponduAttentes ?? "").toString().toUpperCase();
+      if (attMap.has(v)) attMap.set(v, (attMap.get(v) || 0) + 1);
     }
+    const totalAtt = responses.length || 1;
 
-    // ---------- FEUILLE 2 : GRAPHIQUE CONTENU ---------- //
+    // En-tête attentes
+    ws1.addRow([L.expectationsQuestion, "", "", L.percentHeader]);
+    bold(ws1, ws1.lastRow!.number);
+    for (const k of attKeys) {
+      const count = attMap.get(k) || 0;
+      const pct = Math.round((count * 100) / totalAtt);
+      ws1.addRow([k, ...Array(Math.max(0, n - 2)).fill(""), "", `${pct}%`]);
+    }
+    autoOutline(ws1, attRowStart, 1, ws1.lastRow!.number, 4);
+
+    r = ws1.lastRow!.number + 2;
+
+    // Formations complémentaires
+    ws1.addRow([L.complementaryTitle]); bold(ws1, ws1.lastRow!.number);
+    const compStart = ws1.lastRow!.number + 1;
+    ws1.addRow([L.freeTextHeader]); bold(ws1, ws1.lastRow!.number);
+    for (const resp of responses) {
+      const txt = (resp.data?.formationsComplementaires ?? "").toString().trim();
+      if (txt) ws1.addRow([txt]);
+    }
+    autoOutline(ws1, compStart, 1, ws1.lastRow!.number, 1);
+
+    r = ws1.lastRow!.number + 2;
+
+    // Témoignages
+    ws1.addRow([L.testimonialsTitle]); bold(ws1, ws1.lastRow!.number);
+    const temoStart = ws1.lastRow!.number + 1;
+    ws1.addRow([L.freeTextHeader]); bold(ws1, ws1.lastRow!.number);
+    for (const resp of responses) {
+      const txt = (resp.data?.temoignage ?? "").toString().trim();
+      if (txt) ws1.addRow([txt]);
+    }
+    autoOutline(ws1, temoStart, 1, ws1.lastRow!.number, 1);
+
+    // ========= Feuille 2 : Graphiques =========
     const ws2 = wb.addWorksheet(L.sheet2Title);
-    ws2.columns = Array.from({ length: 12 }).map((_, i) => ({ header: "", key: `c${i+1}`, width: 14 }));
-    const contentLabels = CONTENT_KEYS.map(k => L.content[k.id]);
-    const contentVals = contentAvg.map(v => v ?? 0);
-    const cfg2 = buildQCBarConfig(contentLabels, contentVals, cible, L.sheet2Title);
-    const img2 = await fetch(quickChartUrl(cfg2, 1300, 520));
-    if (img2.ok) {
-      const ab2 = await img2.arrayBuffer();
-      const b64_2 = Buffer.from(new Uint8Array(ab2)).toString("base64");
-      const id2 = wb.addImage({ base64: b64_2, extension: "png" });
-      ws2.addImage(id2, { tl: { col: 0, row: 2 }, ext: { width: 1300, height: 520 } });
+    ws2.columns = [{ header: "", key: "c1", width: 150 }];
+
+    ws2.addRow([L.chartTitle]); bold(ws2, ws2.lastRow!.number);
+
+    // Prépare moyennes par critère
+    const means: { label: string; value: number }[] = [];
+    for (const row of [...envRows, ...contRows, ...formRows]) {
+      const arr = responses.map((r) => num(r.data, row.key)).filter((x) => Number.isFinite(x)) as number[];
+      const m = avg(arr);
+      if (m !== null) means.push({ label: row.label, value: Number(m.toFixed(2)) });
+    }
+
+    const labels = means.map((x) => x.label);
+    const dataVals = means.map((x) => x.value);
+    const targetVals = means.map(() => 2.5);
+
+    // Construit une config QuickChart (barres + ligne cible)
+    const qcConfig = {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          { type: "bar", label: L.averageHeader, data: dataVals },
+          { type: "line", label: L.targetHeader, data: targetVals, borderWidth: 2, fill: false },
+        ],
+      },
+      options: {
+        plugins: { legend: { position: "top" } },
+        scales: { y: { min: 0, max: 4 } },
+      },
+    };
+
+    const chartUrl = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(qcConfig))}&backgroundColor=white&devicePixelRatio=2&format=png&width=1400&height=600`;
+    const imgResp = await fetch(chartUrl);
+    if (imgResp.ok) {
+      const ab = await imgResp.arrayBuffer();
+      const imgId = wb.addImage({ buffer: bufFrom(ab), extension: "png" });
+      ws2.addImage(imgId, { tl: { col: 0, row: 2 }, ext: { width: 1300, height: 520 } });
     } else {
       ws2.addRow([L.chartError]);
     }
 
-    // ---------- FEUILLE 3 : GRAPHIQUE FORMATEUR ---------- //
+    // ========= Feuille 3 : Détails (brut) =========
     const ws3 = wb.addWorksheet(L.sheet3Title);
-    ws3.columns = Array.from({ length: 12 }).map((_, i) => ({ header: "", key: `c${i+1}`, width: 14 }));
-    const trainerLabels = TRAINER_KEYS.map(k => L.trainer[k.id]);
-    const trainerVals = trainerAvg.map(v => v ?? 0);
-    const cfg3 = buildQCBarConfig(trainerLabels, trainerVals, cible, L.sheet3Title);
-    const img3 = await fetch(quickChartUrl(cfg3, 1300, 520));
-    if (img3.ok) {
-      const ab3 = await img3.arrayBuffer();
-      const b64_3 = Buffer.from(new Uint8Array(ab3)).toString("base64");
-      const id3 = wb.addImage({ base64: b64_3, extension: "png" });
-      ws3.addImage(id3, { tl: { col: 0, row: 2 }, ext: { width: 1300, height: 520 } });
-    } else {
-      ws3.addRow([L.chartError]);
-    }
+    const detailHeaders = [
+      L.hdTimestamp,
+      "Nom",
+      "Prénoms",
+      "Fonction",
+      "Entreprise",
+      ...[...envRows, ...contRows, ...formRows].map((r) => r.label),
+      "Attentes",
+      "Compléments",
+      "Témoignage",
+      "Consentement",
+    ];
+    ws3.columns = detailHeaders.map((h) => ({ header: h, key: h, width: 22 }));
+    ws3.addRow(detailHeaders);
+    bold(ws3, 1);
 
-    // ---------- FEUILLE 4 : CAMEMBERT ATTENTES ---------- //
+    for (const resp of responses) {
+      const d = resp.data;
+      ws3.addRow([
+        resp.createdAt.toISOString(),
+        d.participantNom ?? "",
+        d.participantPrenoms ?? "",
+        d.participantFonction ?? "",
+        d.participantEntreprise ?? "",
+        ...[...envRows, ...contRows, ...formRows].map((r) => {
+          const v = num(d, r.key);
+          return Number.isFinite(v) ? v : "";
+        }),
+        d.reponduAttentes ?? "",
+        d.formationsComplementaires ?? "",
+        d.temoignage ?? "",
+        d.consentementTemoignage ? "OUI" : "NON",
+      ]);
+    }
+    autoOutline(ws3, 1, 1, Math.max(1, ws3.lastRow?.number || 1), detailHeaders.length);
+
+    // ========= Feuille 4 : Meta =========
     const ws4 = wb.addWorksheet(L.sheet4Title);
-    ws4.columns = Array.from({ length: 12 }).map((_, i) => ({ header: "", key: `c${i+1}`, width: 14 }));
-    const cfg4 = buildQCPie(L.attentesQuestion, att.yesPct, att.noPct);
-    const img4 = await fetch(quickChartUrl(cfg4, 1000, 500));
-    if (img4.ok) {
-      const ab4 = await img4.arrayBuffer();
-      const b64_4 = Buffer.from(new Uint8Array(ab4)).toString("base64");
-      const id4 = wb.addImage({ base64: b64_4, extension: "png" });
-      ws4.addImage(id4, { tl: { col: 0, row: 2 }, ext: { width: 1000, height: 500 } });
-    } else {
-      ws4.addRow([L.chartError]);
-    }
+    ws4.columns = [
+      { header: "", key: "k", width: 35 },
+      { header: "", key: "v", width: 80 },
+    ];
+    ws4.addRow([L.metaTitle]); bold(ws4, 1);
+    ws4.addRow([L.formTitleMeta, form.title]);
+    ws4.addRow([L.trainer, form.trainerName ?? ""]);
+    ws4.addRow([L.date, form.sessionDate ? new Date(form.sessionDate).toLocaleDateString() : ""]);
+    ws4.addRow([L.location, form.location ?? ""]);
+    ws4.addRow([L.responsesCount, responses.length.toString()]);
 
-    // ---------- sortie ---------- //
-    const buf = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
-    const fileName = `${form.slug ?? "form"}_${L.fileSuffix}.xlsx`;
-
-    return new NextResponse(Buffer.from(buf), {
+    // 5) Retourne le classeur
+    const filenameSafe = `${(form.title || "rapport").replace(/[^a-z0-9_\-]+/gi, "_")}_${lang.toUpperCase()}.xlsx`;
+    const buffer = await wb.xlsx.writeBuffer();
+    return new NextResponse(buffer, {
       status: 200,
       headers: {
-        "content-type":
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "content-disposition": `attachment; filename="${fileName}"`,
-        "cache-control": "no-store",
+        "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "content-disposition": `attachment; filename="${filenameSafe}"`,
       },
     });
   } catch (e: any) {
     console.error(e);
     return NextResponse.json({ error: e?.message ?? "Export failed" }, { status: 500 });
-    }
+  }
 }
