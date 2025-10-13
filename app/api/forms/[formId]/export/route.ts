@@ -1,7 +1,10 @@
+// app/api/forms/[formId]/export/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client"; // Utilise le singleton
+import { PrismaClient } from "@prisma/client";
 import ExcelJS from "exceljs";
 import { LABELS } from "../../../../lib/labels";
+
+const prisma = new PrismaClient();
 
 // Helper : ArrayBuffer → Buffer (pour addImage d’ExcelJS)
 const bufFrom = (ab: ArrayBuffer) => Buffer.from(new Uint8Array(ab));
@@ -34,10 +37,7 @@ type RespRow = {
   temoignage?: string | null;
 };
 
-export async function GET(
-  req: Request,
-  { params }: { params: { formId: string } }
-) {
+export async function GET(req: Request, { params }: { params: { formId: string } }) {
   try {
     // --- Langue depuis la query ?lang=fr|en (défaut fr)
     const url = new URL(req.url);
@@ -49,9 +49,10 @@ export async function GET(
     if (!form) return NextResponse.json({ error: "Form not found" }, { status: 404 });
 
     // --- Réponses
+    // On ne dépend PAS d'un champ JSON unique (select) — on prend les colonnes existantes du modèle Response
     const raw = await prisma.response.findMany({
       where: { formId: form.id },
-      orderBy: { id: "asc" },
+      orderBy: { id: "asc" }, // tri stable
     });
 
     const participants: RespRow[] = raw.map((r: any) => ({
@@ -145,10 +146,7 @@ export async function GET(
     function writeCriteriaBlock(rows: ReadonlyArray<{ key: string; label: string }>) {
       rows.forEach((r) => {
         const vals = participants.map((p) => (p[r.key as keyof RespRow] ?? null) as number | null);
-        // Correction TypeScript: s'assurer que s et v sont toujours des nombres
-        const avg = vals.length
-          ? vals.reduce((s, v) => s + (typeof v === "number" ? v : 0), 0) / vals.length
-          : null;
+        const avg = vals.length ? vals.reduce((s, v) => s + (Number(v) || 0), 0) / vals.length : null;
         ws1.addRow([r.label, ...vals, avg, cible]);
       });
       ws1.addRow([]);
@@ -232,9 +230,7 @@ export async function GET(
     const contLabels = L.contRows.map((r) => r.label);
     const contAvgs = contKeys.map((k) => {
       const vals = participants.map((p) => (p[k as keyof RespRow] as number | null) ?? null);
-      return vals.length
-        ? vals.reduce((s, v) => s + (typeof v === "number" ? v : 0), 0) / vals.length
-        : 0;
+      return vals.length ? vals.reduce((s, v) => s + (Number(v) || 0), 0) / vals.length : 0;
     });
 
     const chartCfg1 = {
@@ -257,17 +253,12 @@ export async function GET(
     };
 
     const qcUrl1 = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartCfg1))}&format=png&backgroundColor=white&width=1200&height=550`;
-    let img1Resp: Response;
-    try {
-      img1Resp = await fetch(qcUrl1);
-      if (img1Resp.ok) {
-        const ab = await img1Resp.arrayBuffer();
-        const imgId = wb.addImage({ buffer: bufFrom(ab), extension: "png" });
-        ws2.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
-      } else {
-        ws2.addRow([L.chartError]);
-      }
-    } catch (err) {
+    const img1Resp = await fetch(qcUrl1);
+    if (img1Resp.ok) {
+      const ab = await img1Resp.arrayBuffer();
+      const imgId = wb.addImage({ buffer: bufFrom(ab), extension: "png" });
+      ws2.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
+    } else {
       ws2.addRow([L.chartError]);
     }
 
@@ -281,9 +272,7 @@ export async function GET(
     const formLabels = L.formRows.map((r) => r.label);
     const formAvgs = formKeys.map((k) => {
       const vals = participants.map((p) => (p[k as keyof RespRow] as number | null) ?? null);
-      return vals.length
-        ? vals.reduce((s, v) => s + (typeof v === "number" ? v : 0), 0) / vals.length
-        : 0;
+      return vals.length ? vals.reduce((s, v) => s + (Number(v) || 0), 0) / vals.length : 0;
     });
 
     const chartCfg2 = {
@@ -306,17 +295,12 @@ export async function GET(
     };
 
     const qcUrl2 = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartCfg2))}&format=png&backgroundColor=white&width=1200&height=550`;
-    let img2Resp: Response;
-    try {
-      img2Resp = await fetch(qcUrl2);
-      if (img2Resp.ok) {
-        const ab = await img2Resp.arrayBuffer();
-        const imgId = wb.addImage({ buffer: bufFrom(ab), extension: "png" });
-        ws3.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
-      } else {
-        ws3.addRow([L.chartError]);
-      }
-    } catch (err) {
+    const img2Resp = await fetch(qcUrl2);
+    if (img2Resp.ok) {
+      const ab = await img2Resp.arrayBuffer();
+      const imgId = wb.addImage({ buffer: bufFrom(ab), extension: "png" });
+      ws3.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
+    } else {
       ws3.addRow([L.chartError]);
     }
 
@@ -341,27 +325,21 @@ export async function GET(
     };
 
     const qcPie = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(pieCfg))}&format=png&backgroundColor=white&width=800&height=480`;
-    let imgPieResp: Response;
-    try {
-      imgPieResp = await fetch(qcPie);
-      if (imgPieResp.ok) {
-        const ab = await imgPieResp.arrayBuffer();
-        const imgId = wb.addImage({ buffer: bufFrom(ab), extension: "png" });
-        ws4.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 800, height: 480 } });
-      } else {
-        ws4.addRow([L.chartError]);
-      }
-    } catch (err) {
+    const imgPieResp = await fetch(qcPie);
+    if (imgPieResp.ok) {
+      const ab = await imgPieResp.arrayBuffer();
+      const imgId = wb.addImage({ buffer: bufFrom(ab), extension: "png" });
+      ws4.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 800, height: 480 } });
+    } else {
       ws4.addRow([L.chartError]);
     }
 
     // --- Buffer & réponse
     const xbuf = await wb.xlsx.writeBuffer();
-    const uint8 = new Uint8Array(xbuf);
     const fnameBase = (form.title || "evaluation").replace(/[^\p{L}\p{N}\-_ ]/gu, "").slice(0, 60);
     const filename = `${fnameBase}_${lang.toUpperCase()}.xlsx`;
 
-    return new NextResponse(uint8, {
+    return new NextResponse(xbuf as any, {
       status: 200,
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
