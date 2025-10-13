@@ -58,13 +58,39 @@ export async function GET(
     }
 
     // --- réponses (tri par id pour stabilité) ---
-    // Cast en any pour tolérer un champ JSON `data` non présent dans les types Prisma
-    const raw: Array<{ data: unknown }> = await (prisma as any).response.findMany({
+    // IMPORTANT: on sélectionne les colonnes réelles du modèle Response (pas de champ JSON `data`)
+    const raw = await prisma.response.findMany({
       where: { formId: form.id },
       orderBy: { id: "asc" },
-      select: { data: true }, // <-- si ton champ s'appelle autrement (ex: payload), change ici et le map juste après.
+      select: {
+        participantNom: true,
+        participantPrenoms: true,
+        participantEntreprise: true,
+
+        envAccueil: true,
+        envLieu: true,
+        envMateriel: true,
+
+        contAttentes: true,
+        contUtiliteTravail: true,
+        contExercices: true,
+        contMethodologie: true,
+        contSupports: true,
+        contRythme: true,
+        contGlobal: true,
+
+        formMaitrise: true,
+        formCommunication: true,
+        formClarte: true,
+        formMethodo: true,
+        formGlobal: true,
+
+        reponduAttentes: true,
+        formationsComplementaires: true,
+        temoignage: true,
+      },
     });
-    const participants: RespRow[] = raw.map((r) => r.data as RespRow);
+    const participants: RespRow[] = raw as RespRow[];
 
     // --- Excel ---
     const wb = new ExcelJS.Workbook();
