@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@prisma/client"; // Utilise le singleton
+import { PrismaClient } from "@prisma/client"; // Utilise le singleton
 import ExcelJS from "exceljs";
 import { LABELS } from "../../../../lib/labels";
 
