@@ -1,128 +1,125 @@
-// Centralise tous les libellés utilisés par l’export Excel (FR/EN)
+// app/lib/labels.ts
 
 export const LABELS = {
   fr: {
-    // Titres de feuilles (tu peux les renommer librement)
+    // TITRES DES FEUILLES
     sheet1Title: "SYNTHÈSE",
-    sheet2Title: "GRAPHIQUES",
-    sheet3Title: "DÉTAILS",
-    sheet4Title: "MÉTA",
+    sheet2Title: "GRAPHIQUE CONTENU",
+    sheet3Title: "GRAPHIQUE FORMATEUR",
+    sheet4Title: "CAMEMBERT ATTENTES",
 
-    // En-têtes / champs communs
-    reportTitle: "Rapport d’évaluation",
-    trainer: "Formateur",
-    date: "Date",
+    // MÉTA FORMATION
+    formTitle: "Fiche formation",
+    sessionDate: "Date de session",
+    trainerName: "Formateur",
     location: "Lieu",
-    criteriaHeader: "Critère",
-    participantShort: "P",
-    averageHeader: "Moyenne",
-    targetHeader: "Cible",
-    responsesCount: "Nombre de réponses",
-    formTitleMeta: "Intitulé de la formation",
+    formPublicUrl: "URL publique du formulaire",
 
-    // Bloc attentes
-    expectationsTitle: "ATTENTES DES PARTICIPANTS",
-    expectationsQuestion: "Cette formation a-t-elle répondu à vos attentes ?",
-    percentHeader: "%",
-
-    // Textes libres
+    // TITRES DES BLOCS
+    envTitle: "ENVIRONNEMENT DE FORMATION",
+    contTitle: "CONTENU DE LA FORMATION",
+    formTitleBlock: "FORMATEUR / ANIMATION",
+    expectTitle: "ATTENTES DES PARTICIPANTS",
     complementaryTitle: "Formations complémentaires envisagées",
-    freeTextHeader: "Texte libre",
-    testimonialsTitle: "Témoignages des participants",
+    testimonyTitle: "Témoignages des participants",
 
-    // Feuille 2 (graphiques)
-    chartTitle: "Moyennes par critère (ligne = cible 2,5)",
-    chartError: "Impossible de générer le graphique QuickChart",
+    // EN-TÊTES DE TABLEAUX
+    criteriaHeader: "Critère",
+    avgHeader: "Moyenne",
+    targetHeader: "Cible",
 
-    // Feuille 3 (détails)
-    hdTimestamp: "Horodatage",
+    // QUESTIONS / TEXTES
+    expectQuestion: "Cette formation a-t-elle répondu à vos attentes ?",
+    expectYesLabel: "OUI",
+    expectPartialLabel: "PARTIELLEMENT",
+    expectNoLabel: "NON",
+    noneText: "—",
 
-    // Groupes + lignes (clé = champs JSON de la réponse)
-    envTitle: "I. L’environnement de la formation",
+    // ERREUR
+    chartError: "Erreur de génération du graphique",
+
+    // LIGNES DE CRITÈRES
     envRows: [
-      { key: "envAccueil",   label: "1. Comment avez-vous trouvé l’Accueil ?" },
-      { key: "envLieu",      label: "2. Comment avez-vous trouvé le(s) Lieu(x) de formation ?" },
-      { key: "envMateriel",  label: "3. Comment avez-vous trouvé le Matériel mis à disposition ?" },
+      { key: "envAccueil", label: "1. Comment avez-vous trouvé l’Accueil ?" },
+      { key: "envLieu", label: "2. Comment avez-vous trouvé le(s) Lieu(x) de formation ?" },
+      { key: "envMateriel", label: "3. Comment avez-vous trouvé le Matériel mis à disposition ?" },
     ],
-
-    contTitle: "II. Le Contenu de la formation",
     contRows: [
-      { key: "contAttentes",        label: "1. Le contenu couvre-t-il vos attentes ?" },
-      { key: "contUtiliteTravail",  label: "2. Le contenu est-il utile pour votre travail ?" },
-      { key: "contExercices",       label: "3. Exercices / exemples / vidéos" },
-      { key: "contMethodologie",    label: "4. Méthodologie utilisée" },
-      { key: "contSupports",        label: "5. Supports de formation" },
-      { key: "contRythme",          label: "6. Rythme de la formation" },
-      { key: "contGlobal",          label: "Évaluation globale de la formation" },
+      { key: "contAttentes", label: "1. Le contenu répondait-il à vos attentes ?" },
+      { key: "contUtiliteTravail", label: "2. Le contenu vous sera-t-il utile dans votre travail ?" },
+      { key: "contExercices", label: "3. Les exercices étaient-ils adaptés ?" },
+      { key: "contMethodologie", label: "4. La méthodologie employée était-elle pertinente ?" },
+      { key: "contSupports", label: "5. Les supports de formation étaient-ils adaptés ?" },
+      { key: "contRythme", label: "6. Le rythme de la formation était-il approprié ?" },
+      { key: "contGlobal", label: "7. Évaluation globale du contenu" },
     ],
-
-    formTitle: "III. Le(s) Formateur(s)",
     formRows: [
-      { key: "formMaitrise",       label: "1. Maîtrise du sujet" },
-      { key: "formCommunication",  label: "2. Qualité de communication" },
-      { key: "formClarte",         label: "3. Clarté des réponses aux questions" },
-      { key: "formMethodo",        label: "4. Maîtrise de la méthodologie de formation" },
-      { key: "formGlobal",         label: "5. Évaluation globale du formateur" },
+      { key: "formMaitrise", label: "1. Le formateur maîtrise-t-il son sujet ?" },
+      { key: "formCommunication", label: "2. Le formateur communique-t-il clairement ?" },
+      { key: "formClarte", label: "3. Le formateur répond-il clairement aux questions ?" },
+      { key: "formMethodo", label: "4. Sa méthode pédagogique était-elle adaptée ?" },
+      { key: "formGlobal", label: "5. Évaluation globale du formateur" },
     ],
   },
 
   en: {
-    sheet1Title: "SUMMARY",
-    sheet2Title: "CHARTS",
-    sheet3Title: "DETAILS",
-    sheet4Title: "META",
+    // SHEET TITLES
+    sheet1Title: "SYNTHESIS",
+    sheet2Title: "CONTENT CHART",
+    sheet3Title: "TRAINER CHART",
+    sheet4Title: "EXPECTATIONS PIE",
 
-    reportTitle: "Training evaluation report",
-    trainer: "Trainer",
-    date: "Date",
+    // META FORM INFO
+    formTitle: "Training summary",
+    sessionDate: "Session date",
+    trainerName: "Trainer",
     location: "Location",
-    criteriaHeader: "Criterion",
-    participantShort: "P",
-    averageHeader: "Average",
+    formPublicUrl: "Public form URL",
+
+    // SECTION TITLES
+    envTitle: "TRAINING ENVIRONMENT",
+    contTitle: "TRAINING CONTENT",
+    formTitleBlock: "TRAINER / DELIVERY",
+    expectTitle: "PARTICIPANTS’ EXPECTATIONS",
+    complementaryTitle: "Planned complementary training",
+    testimonyTitle: "Participants’ testimonials",
+
+    // TABLE HEADERS
+    criteriaHeader: "Criteria",
+    avgHeader: "Average",
     targetHeader: "Target",
-    responsesCount: "Responses count",
-    formTitleMeta: "Training title",
 
-    expectationsTitle: "PARTICIPANTS’ EXPECTATIONS",
-    expectationsQuestion: "Did this training meet your expectations?",
-    percentHeader: "%",
+    // QUESTIONS / TEXTS
+    expectQuestion: "Did this training meet your expectations?",
+    expectYesLabel: "YES",
+    expectPartialLabel: "PARTIALLY",
+    expectNoLabel: "NO",
+    noneText: "—",
 
-    complementaryTitle: "Additional trainings considered",
-    freeTextHeader: "Free text",
-    testimonialsTitle: "Participants’ testimonials",
+    // ERRORS
+    chartError: "Chart generation error",
 
-    chartTitle: "Averages per criterion (line = target 2.5)",
-    chartError: "Unable to generate chart from QuickChart",
-
-    hdTimestamp: "Timestamp",
-
-    envTitle: "I. Training environment",
+    // CRITERIA ROWS
     envRows: [
-      { key: "envAccueil",   label: "1. How did you find the welcome/reception?" },
-      { key: "envLieu",      label: "2. How did you find the training venue(s)?" },
-      { key: "envMateriel",  label: "3. How did you find the equipment provided?" },
+      { key: "envAccueil", label: "1. How did you find the Welcome?" },
+      { key: "envLieu", label: "2. How did you find the Training Location(s)?" },
+      { key: "envMateriel", label: "3. How did you find the provided Materials?" },
     ],
-
-    contTitle: "II. Training content",
     contRows: [
-      { key: "contAttentes",        label: "1. Does the content meet your expectations?" },
-      { key: "contUtiliteTravail",  label: "2. Is the content useful for your work?" },
-      { key: "contExercices",       label: "3. Exercises / examples / videos" },
-      { key: "contMethodologie",    label: "4. Methodology used" },
-      { key: "contSupports",        label: "5. Training materials" },
-      { key: "contRythme",          label: "6. Training pace" },
-      { key: "contGlobal",          label: "Overall evaluation of the training" },
+      { key: "contAttentes", label: "1. Did the content meet your expectations?" },
+      { key: "contUtiliteTravail", label: "2. Will the content be useful in your job?" },
+      { key: "contExercices", label: "3. Were the exercises appropriate?" },
+      { key: "contMethodologie", label: "4. Was the methodology relevant?" },
+      { key: "contSupports", label: "5. Were the materials suitable?" },
+      { key: "contRythme", label: "6. Was the training pace appropriate?" },
+      { key: "contGlobal", label: "7. Overall content evaluation" },
     ],
-
-    formTitle: "III. Trainer(s)",
     formRows: [
-      { key: "formMaitrise",       label: "1. Mastery of the subject" },
-      { key: "formCommunication",  label: "2. Quality of communication" },
-      { key: "formClarte",         label: "3. Clarity of answers to questions" },
-      { key: "formMethodo",        label: "4. Mastery of training methodology" },
-      { key: "formGlobal",         label: "5. Overall evaluation of the trainer" },
+      { key: "formMaitrise", label: "1. Did the trainer master the subject?" },
+      { key: "formCommunication", label: "2. Did the trainer communicate clearly?" },
+      { key: "formClarte", label: "3. Did the trainer answer questions clearly?" },
+      { key: "formMethodo", label: "4. Was the teaching method appropriate?" },
+      { key: "formGlobal", label: "5. Overall trainer evaluation" },
     ],
   },
 } as const;
-
-export type Labels = typeof LABELS["fr"];
