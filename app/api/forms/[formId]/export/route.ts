@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import ExcelJS from "exceljs";
-import { LABELS } from from "../../../../lib/labels"; // { fr: {...}, en: {...} }
+import { LABELS } from "../../../../lib/labels"; // { fr: {...}, en: {...} }
 
 const prisma = new PrismaClient();
 
