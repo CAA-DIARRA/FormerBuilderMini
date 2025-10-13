@@ -58,13 +58,12 @@ export async function GET(
     }
 
     // --- réponses (tri par id pour stabilité) ---
-    const raw = await prisma.response.findMany({
+    // Cast en any pour tolérer un champ JSON `data` non présent dans les types Prisma
+    const raw: Array<{ data: unknown }> = await (prisma as any).response.findMany({
       where: { formId: form.id },
       orderBy: { id: "asc" },
-      // Votre modèle Response contient un champ JSON `data`
-      // (si nom différent, adaptez ici)
-      select: { data: true },
-    });
+      select: { data: true }, // <-- si ton champ s'appelle autrement (ex: payload), change ici et le map juste après.
+    }); // 👈 cast prisma en any
     const participants: RespRow[] = raw.map((r) => r.data as RespRow);
 
     // --- Excel ---
@@ -142,7 +141,7 @@ export async function GET(
         const vals = participants.map(
           (p) => (p[r.key as keyof RespRow] ?? null) as number | null
         );
-        // moyenne “safe” (évite TS “possibly null”)
+        // moyenne "safe"
         const nums = vals.map((v) => (typeof v === "number" ? v : 0));
         const avg = nums.length ? nums.reduce((s, v) => s + v, 0) / nums.length : null;
 
@@ -256,7 +255,6 @@ export async function GET(
     const img1Resp = await fetch(qcUrl1);
     if (img1Resp.ok) {
       const ab = await img1Resp.arrayBuffer();
-      // cast en any pour calmer un décalage de types ExcelJS/Buffer
       const imgId = wb.addImage({ buffer: bufFrom(ab) as any, extension: "png" });
       ws2.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
     } else {
@@ -313,6 +311,10 @@ export async function GET(
     const ws4 = wb.addWorksheet(L.sheet4Title);
     ws4.getColumn(1).width = 160;
 
+    const countOui = resAtt.filter((x) => x === "OUI").length;
+    const countPartiel = resAtt.filter((x) => x === "PARTIELLEMENT").length;
+    const countNon = resAtt.filter((x) => x === "NON").length;
+
     const pieCfg = {
       type: "pie",
       data: {
@@ -321,9 +323,7 @@ export async function GET(
           (L as any).expectPartialLabel ?? "PARTIELLEMENT",
           (L as any).expectNoLabel ?? "NON",
         ],
-        datasets: [
-          { data: [count.oui, count.partiel, count.non] },
-        ],
+        datasets: [{ data: [countOui, countPartiel, countNon] }],
       },
       options: {
         plugins: {
