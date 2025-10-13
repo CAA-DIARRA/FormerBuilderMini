@@ -63,7 +63,7 @@ export async function GET(
       where: { formId: form.id },
       orderBy: { id: "asc" },
       select: { data: true }, // <-- si ton champ s'appelle autrement (ex: payload), change ici et le map juste après.
-    }); // 👈 cast prisma en any
+    });
     const participants: RespRow[] = raw.map((r) => r.data as RespRow);
 
     // --- Excel ---
@@ -85,7 +85,7 @@ export async function GET(
     ws1.properties.defaultRowHeight = 18;
 
     // Titre/Meta
-    ws1.addRow([L.reportTitle || "Rapport d’évaluation"]);
+    ws1.addRow([(L as any).reportTitle || "Rapport d’évaluation"]);
     ws1.mergeCells("A1:E1");
     ws1.getCell("A1").font = { bold: true, size: 14 };
 
