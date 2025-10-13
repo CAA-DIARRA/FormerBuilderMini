@@ -1,290 +1,360 @@
-import { NextRequest, NextResponse } from "next/server";
+// app/api/forms/[formId]/export/route.ts
+import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import ExcelJS from "exceljs";
-import { Buffer } from "buffer";
-import { LABELS } from "../../../../lib/labels"; // chemin : app/api/forms/[formId]/export -> app/lib
+import { LABELS } from "@/app/lib/labels";
 
 const prisma = new PrismaClient();
 
-type Resp = { data: Record<string, any>; createdAt: Date };
+// Petit helper: ArrayBuffer -> Node Buffer (ExcelJS addImage attend un Buffer)
+const bufFrom = (ab: ArrayBuffer) => Buffer.from(new Uint8Array(ab));
 
-function bufFrom(ab: ArrayBuffer) {
-  return Buffer.from(new Uint8Array(ab));
-}
+type RespRow = {
+  participantNom?: string | null;
+  participantPrenoms?: string | null;
+  participantEntreprise?: string | null;
 
-function avg(nums: number[]) {
-  const vals = nums.filter((n) => Number.isFinite(n));
-  if (!vals.length) return null;
-  return vals.reduce((a, b) => a + b, 0) / vals.length;
-}
+  envAccueil?: number | null;
+  envLieu?: number | null;
+  envMateriel?: number | null;
 
-function solidGrayFill(): any {
-  return { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFEFEF" } } as any;
-}
+  contAttentes?: number | null;
+  contUtiliteTravail?: number | null;
+  contExercices?: number | null;
+  contMethodologie?: number | null;
+  contSupports?: number | null;
+  contRythme?: number | null;
+  contGlobal?: number | null;
 
-function bold(ws: ExcelJS.Worksheet, row: number) {
-  ws.getRow(row).font = { bold: true };
-}
+  formMaitrise?: number | null;
+  formCommunication?: number | null;
+  formClarte?: number | null;
+  formMethodo?: number | null;
+  formGlobal?: number | null;
 
-function autoOutline(ws: ExcelJS.Worksheet, r1: number, c1: number, r2: number, c2: number) {
-  for (let r = r1; r <= r2; r++) {
-    for (let c = c1; c <= c2; c++) {
-      ws.getCell(r, c).border = {
-        top: { style: "thin" },
-        bottom: { style: "thin" },
-        left: { style: "thin" },
-        right: { style: "thin" },
-      };
-    }
-  }
-}
+  reponduAttentes?: "OUI" | "PARTIELLEMENT" | "NON" | null;
+  formationsComplementaires?: string | null;
+  temoignage?: string | null;
+};
 
-export async function GET(req: NextRequest, { params }: { params: { formId: string } }) {
+export async function GET(
+  req: Request,
+  { params }: { params: { formId: string } }
+) {
   try {
+    // --- langue ---
     const url = new URL(req.url);
     const lang = (url.searchParams.get("lang") === "en" ? "en" : "fr") as "fr" | "en";
     const L = LABELS[lang];
 
+    // --- données de base du formulaire ---
     const form = await prisma.form.findUnique({ where: { id: params.formId } });
     if (!form) {
       return NextResponse.json({ error: "Form not found" }, { status: 404 });
     }
 
-    // --- Chargement des réponses, robuste au schéma ---
-    const raw = await (prisma.response as any).findMany({
+    // --- réponses (on ne dépend pas d'un champ createdAt : tri par id) ---
+    const raw = await prisma.response.findMany({
       where: { formId: form.id },
-      orderBy: { id: "asc" }, // tri sûr
-      select: { data: true, submittedAt: true, createdAt: true, id: true } as any,
+      orderBy: { id: "asc" },
+      select: { data: true }, // data JSON
+    });
+    const participants: RespRow[] = raw.map((r) => r.data as RespRow);
+
+    // --- Excel ---
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "FormerBuilder";
+    wb.created = new Date();
+
+    // Styles de base
+    const grayFill = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFEFEFEF" } };
+    const headerFill = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FF1A73E8" } };
+    const white = { argb: "FFFFFFFF" };
+
+    const cible = L.cibleValue ?? 2.5; // cible par défaut si non précisé dans labels
+
+    // ===============================
+    // FEUILLE 1 — SYNTHÈSE (tableaux)
+    // ===============================
+    const ws1 = wb.addWorksheet(L.sheet1Title);
+    ws1.properties.defaultRowHeight = 18;
+
+    // Meta haut de page
+    ws1.addRow([L.formTitle || "Fiche formation"]);
+    ws1.mergeCells("A1:E1");
+    ws1.getCell("A1").font = { bold: true, size: 14 };
+
+    const meta = [
+      [L.sessionDate, form.sessionDate ? new Date(form.sessionDate).toLocaleDateString() : ""],
+      [L.trainerName, form.trainerName ?? ""],
+      [L.location, form.location ?? ""],
+      [L.formPublicUrl, `${process.env.NEXT_PUBLIC_BASE_URL ?? ""}/f/${form.slug}`],
+    ];
+    meta.forEach((r) => ws1.addRow(r));
+    ws1.addRow([]);
+
+    // Initiales colonnes dynamiques
+    const initials = participants.map((p, idx) => {
+      const prenom = (p.participantPrenoms || "").trim();
+      const nom = (p.participantNom || "").trim();
+      if (!prenom && !nom) return `P${idx + 1}`;
+      const i1 = prenom ? prenom.trim()[0] : "";
+      const i2 = nom ? nom.trim()[0] : "";
+      return `${(i1 + i2).toUpperCase() || `P${idx + 1}`}`;
     });
 
-    const responses: Resp[] = raw.map((r: any) => ({
-      data: r?.data ?? {},
-      createdAt: new Date(r?.submittedAt ?? r?.createdAt ?? Date.now()),
-    }));
+    // En-tête pour les blocs critère
+    const makeHeader = (title: string) => {
+      // Titre de groupe (merge sur toutes les colonnes)
+      const colsCount = 1 + participants.length + 2; // Critère + N participants + (Moyenne, Cible)
+      const r = ws1.addRow([title]);
+      ws1.mergeCells(r.number, 1, r.number, colsCount);
+      r.font = { bold: true };
+      r.fill = grayFill;
+      r.alignment = { vertical: "middle", horizontal: "left" };
 
-    // --- Préparation des critères ---
-    const envRows = L.envRows;
-    const contRows = L.contRows;
-    const formRows = L.formRows;
+      // Ligne d’entête
+      const head = ws1.addRow([
+        L.criteriaHeader ?? "Critère",
+        ...initials,
+        L.avgHeader ?? "Moyenne",
+        L.targetHeader ?? "Cible",
+      ]);
+      head.font = { bold: true, color: white };
+      head.fill = headerFill;
+      head.alignment = { vertical: "middle", horizontal: "center" };
 
-    const wb = new ExcelJS.Workbook();
-
-    // ========== FEUILLE 1 : Synthèse ==========
-    const ws1 = wb.addWorksheet(L.sheet1Title);
-    const n = responses.length;
-
-    ws1.columns = [{ header: L.criteriaHeader, key: "crit", width: 50 }];
-    for (let i = 0; i < n; i++) {
-      ws1.columns!.push({ header: `${L.participantShort} ${i + 1}`, key: `p${i + 1}`, width: 12 });
-    }
-    ws1.columns!.push({ header: L.averageHeader, key: "avg", width: 12 });
-    ws1.columns!.push({ header: L.targetHeader, key: "target", width: 12 });
-
-    let r = 1;
-    ws1.mergeCells(r, 1, r, n + 3);
-    ws1.getCell(r, 1).value = `${L.reportTitle} — ${form.title}`;
-    ws1.getCell(r, 1).font = { bold: true, size: 14 };
-    r += 2;
-
-    ws1.addRow([`${L.trainer}: ${form.trainerName ?? ""}`]);
-    ws1.addRow([`${L.date}: ${form.sessionDate ? new Date(form.sessionDate).toLocaleDateString() : ""}`]);
-    ws1.addRow([`${L.location}: ${form.location ?? ""}`]);
-    r += 4;
-
-    const groupTitle = (title: string) => {
-      ws1.addRow([title]);
-      const rr = ws1.lastRow!;
-      ws1.mergeCells(rr.number, 1, rr.number, n + 3);
-      rr.font = { bold: true };
-      rr.fill = solidGrayFill();
+      // Largeurs
+      const widths = [40, ...Array(initials.length).fill(8), 10, 10];
+      widths.forEach((w, i) => (ws1.getColumn(i + 1).width = w));
     };
 
-    const num = (d: Record<string, any>, key: string) => {
-      const v = d?.[key];
-      const n = Number(v);
-      return Number.isFinite(n) ? n : NaN;
+    // Helper d’écriture d’un bloc de critères
+    function writeCriteriaBlock(rows: ReadonlyArray<{ key: string; label: string }>) {
+      rows.forEach((r) => {
+        const vals = participants.map((p) => (p[r.key as keyof RespRow] ?? null) as number | null);
+        const avg =
+          vals.length ? vals.reduce((s, v) => s + (Number(v) || 0), 0) / vals.length : null;
+
+        const row = ws1.addRow([
+          r.label,
+          ...vals,
+          avg,
+          cible,
+        ]);
+        row.alignment = { vertical: "middle" };
+        row.height = 18;
+      });
+      ws1.addRow([]);
+    }
+
+    // Blocs : Environnement / Contenu / Formateur(s)
+    makeHeader(L.envTitle);
+    writeCriteriaBlock(L.envRows);
+
+    makeHeader(L.contTitle);
+    writeCriteriaBlock(L.contRows);
+
+    makeHeader(L.formTitle);
+    writeCriteriaBlock(L.formRows);
+
+    // Bloc : Attentes (compte + %)
+    // Table de comptage OUI / PARTIELLEMENT / NON
+    const attTitle = ws1.addRow([L.expectTitle || "ATTENTES DES PARTICIPANTS"]);
+    ws1.mergeCells(attTitle.number, 1, attTitle.number, 6);
+    attTitle.font = { bold: true };
+    attTitle.fill = grayFill;
+    attTitle.alignment = { vertical: "middle", horizontal: "left" };
+
+    const resAtt = participants.map((p) => p.reponduAttentes || "");
+    const total = resAtt.filter((x) => x).length || 1;
+    const count = {
+      oui: resAtt.filter((x) => x === "OUI").length,
+      partiel: resAtt.filter((x) => x === "PARTIELLEMENT").length,
+      non: resAtt.filter((x) => x === "NON").length,
+    };
+    const pct = {
+      oui: Math.round((count.oui * 10000) / total) / 100,
+      partiel: Math.round((count.partiel * 10000) / total) / 100,
+      non: Math.round((count.non * 10000) / total) / 100,
     };
 
-    const writeCriteriaBlock = (rows: { key: string; label: string }[]) => {
-      for (const row of rows) {
-        const vals: (string | number | null)[] = [row.label];
-        const nums: number[] = [];
-        for (let i = 0; i < n; i++) {
-          const v = num(responses[i]?.data ?? {}, row.key);
-          vals.push(Number.isFinite(v) ? v : "");
-          if (Number.isFinite(v)) nums.push(v);
-        }
-        const m = avg(nums);
-        vals.push(m !== null ? Number(m.toFixed(2)) : "");
-        vals.push(2.5);
-        ws1.addRow(vals as any);
-      }
-    };
+    ws1.addRow([L.expectQuestion || "Cette formation a-t-elle répondu à vos attentes ?", "", "", "", "", "%"]);
+    ws1.addRow(["OUI", ...Array(participants.length).fill(""), "", "", "", `${pct.oui}%`]);
+    ws1.addRow(["PARTIELLEMENT", ...Array(participants.length).fill(""), "", "", "", `${pct.partiel}%`]);
+    ws1.addRow(["NON", ...Array(participants.length).fill(""), "", "", "", `${pct.non}%`]);
+    ws1.addRow([]);
 
-    groupTitle(L.envTitle);
-    writeCriteriaBlock(envRows);
-    groupTitle(L.contTitle);
-    writeCriteriaBlock(contRows);
-    groupTitle(L.formTitle);
-    writeCriteriaBlock(formRows);
+    // Bloc : Formations complémentaires (liste)
+    const compTitle = ws1.addRow([L.complementaryTitle || "Formations complémentaires envisagées"]);
+    ws1.mergeCells(compTitle.number, 1, compTitle.number, 6);
+    compTitle.font = { bold: true };
+    compTitle.fill = grayFill;
 
-    autoOutline(ws1, 7, 1, ws1.lastRow!.number, n + 3);
-
-    r = ws1.lastRow!.number + 2;
-
-    // Tableau ATTENTES
-    ws1.addRow([L.expectationsTitle]);
-    bold(ws1, ws1.lastRow!.number);
-    const attRowStart = ws1.lastRow!.number + 1;
-
-    const attKeys = ["OUI", "PARTIELLEMENT", "NON"];
-    const attMap = new Map<string, number>();
-    for (const k of attKeys) attMap.set(k, 0);
-    for (const resp of responses) {
-      const v = (resp.data?.reponduAttentes ?? "").toString().toUpperCase();
-      if (attMap.has(v)) attMap.set(v, (attMap.get(v) || 0) + 1);
+    const compList = participants
+      .map((p) => (p.formationsComplementaires || "").trim())
+      .filter(Boolean);
+    if (compList.length === 0) {
+      ws1.addRow([L.noneText || "—"]);
+    } else {
+      compList.forEach((txt, i) => ws1.addRow([`${i + 1}. ${txt}`]));
     }
-    const totalAtt = responses.length || 1;
+    ws1.addRow([]);
 
-    ws1.addRow([L.expectationsQuestion, "", "", L.percentHeader]);
-    bold(ws1, ws1.lastRow!.number);
-    for (const k of attKeys) {
-      const count = attMap.get(k) || 0;
-      const pct = Math.round((count * 100) / totalAtt);
-      ws1.addRow([k, "", "", `${pct}%`]);
-    }
-    autoOutline(ws1, attRowStart, 1, ws1.lastRow!.number, 4);
+    // Bloc : Témoignages (liste)
+    const temoTitle = ws1.addRow([L.testimonyTitle || "Témoignages des participants"]);
+    ws1.mergeCells(temoTitle.number, 1, temoTitle.number, 6);
+    temoTitle.font = { bold: true };
+    temoTitle.fill = grayFill;
 
-    r = ws1.lastRow!.number + 2;
-
-    // Formations complémentaires
-    ws1.addRow([L.complementaryTitle]);
-    bold(ws1, ws1.lastRow!.number);
-    ws1.addRow([L.freeTextHeader]);
-    bold(ws1, ws1.lastRow!.number);
-    for (const resp of responses) {
-      const txt = (resp.data?.formationsComplementaires ?? "").toString().trim();
-      if (txt) ws1.addRow([txt]);
+    const temoList = participants
+      .map((p) => (p.temoignage || "").trim())
+      .filter(Boolean);
+    if (temoList.length === 0) {
+      ws1.addRow([L.noneText || "—"]);
+    } else {
+      temoList.forEach((txt, i) => ws1.addRow([`${i + 1}. ${txt}`]));
     }
 
-    r = ws1.lastRow!.number + 2;
-
-    // Témoignages
-    ws1.addRow([L.testimonialsTitle]);
-    bold(ws1, ws1.lastRow!.number);
-    ws1.addRow([L.freeTextHeader]);
-    bold(ws1, ws1.lastRow!.number);
-    for (const resp of responses) {
-      const txt = (resp.data?.temoignage ?? "").toString().trim();
-      if (txt) ws1.addRow([txt]);
-    }
-
-    // ========== FEUILLE 2 : Graphiques ==========
+    // ===============================
+    // FEUILLE 2 — GRAPHIQUE CONTENU
+    // ===============================
     const ws2 = wb.addWorksheet(L.sheet2Title);
-    ws2.columns = [{ header: "", key: "c1", width: 150 }];
-    ws2.addRow([L.chartTitle]);
-    bold(ws2, ws2.lastRow!.number);
+    ws2.getColumn(1).width = 160;
 
-    const means: { label: string; value: number }[] = [];
-    for (const row of [...envRows, ...contRows, ...formRows]) {
-      const arr = responses.map((r) => num(r.data, row.key)).filter((x) => Number.isFinite(x)) as number[];
-      const m = avg(arr);
-      if (m !== null) means.push({ label: row.label, value: Number(m.toFixed(2)) });
-    }
+    // Moyennes par critère (Contenu)
+    const contKeys = L.contRows.map((r) => r.key);
+    const contLabels = L.contRows.map((r) => r.label);
+    const contAvgs = contKeys.map((k) => {
+      const vals = participants.map((p) => (p[k as keyof RespRow] as number | null) ?? null);
+      return vals.length ? vals.reduce((s, v) => s + (Number(v) || 0), 0) / vals.length : 0;
+    });
 
-    const labels = means.map((x) => x.label);
-    const dataVals = means.map((x) => x.value);
-    const targetVals = means.map(() => 2.5);
-
-    const qcConfig = {
+    // Image QuickChart barres
+    const chartCfg1 = {
       type: "bar",
       data: {
-        labels,
+        labels: contLabels,
         datasets: [
-          { type: "bar", label: L.averageHeader, data: dataVals },
-          { type: "line", label: L.targetHeader, data: targetVals, borderWidth: 2, fill: false },
+          { label: L.avgHeader ?? "Moyenne", data: contAvgs },
+          { label: L.targetHeader ?? "Cible", data: contAvgs.map(() => cible) },
         ],
       },
       options: {
-        plugins: { legend: { position: "top" } },
-        scales: { y: { min: 0, max: 4 } },
+        indexAxis: "y",
+        plugins: {
+          legend: { position: "bottom" },
+          title: { display: true, text: L.sheet2Title },
+        },
+        scales: { x: { suggestedMin: 0, suggestedMax: 4 } },
       },
     };
 
-    const chartUrl = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(qcConfig))}&backgroundColor=white&devicePixelRatio=2&format=png&width=1400&height=600`;
-    const imgResp = await fetch(chartUrl);
-    if (imgResp.ok) {
-      const ab = await imgResp.arrayBuffer();
+    const qcUrl1 = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartCfg1))}&format=png&backgroundColor=white&width=1200&height=550`;
+    const img1Resp = await fetch(qcUrl1);
+    if (img1Resp.ok) {
+      const ab = await img1Resp.arrayBuffer();
       const imgId = wb.addImage({ buffer: bufFrom(ab), extension: "png" });
-      ws2.addImage(imgId, { tl: { col: 0, row: 2 }, ext: { width: 1300, height: 520 } });
+      ws2.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
     } else {
-      ws2.addRow([L.chartError]);
+      ws2.addRow([L.chartError || "Erreur de génération du graphique"]);
     }
 
-    // ========== FEUILLE 3 : Détails ==========
+    // =================================
+    // FEUILLE 3 — GRAPHIQUE FORMATEUR
+    // =================================
     const ws3 = wb.addWorksheet(L.sheet3Title);
-    const detailHeaders = [
-      L.hdTimestamp,
-      "Nom",
-      "Prénoms",
-      "Fonction",
-      "Entreprise",
-      ...[...envRows, ...contRows, ...formRows].map((r) => r.label),
-      "Attentes",
-      "Compléments",
-      "Témoignage",
-      "Consentement",
-    ];
-    ws3.columns = detailHeaders.map((h) => ({ header: h, key: h, width: 22 }));
-    ws3.addRow(detailHeaders);
-    bold(ws3, 1);
+    ws3.getColumn(1).width = 160;
 
-    for (const resp of responses) {
-      const d = resp.data;
-      ws3.addRow([
-        resp.createdAt.toISOString(),
-        d.participantNom ?? "",
-        d.participantPrenoms ?? "",
-        d.participantFonction ?? "",
-        d.participantEntreprise ?? "",
-        ...[...envRows, ...contRows, ...formRows].map((r) => {
-          const v = num(d, r.key);
-          return Number.isFinite(v) ? v : "";
-        }),
-        d.reponduAttentes ?? "",
-        d.formationsComplementaires ?? "",
-        d.temoignage ?? "",
-        d.consentementTemoignage ? "OUI" : "NON",
-      ]);
+    const formKeys = L.formRows.map((r) => r.key);
+    const formLabels = L.formRows.map((r) => r.label);
+    const formAvgs = formKeys.map((k) => {
+      const vals = participants.map((p) => (p[k as keyof RespRow] as number | null) ?? null);
+      return vals.length ? vals.reduce((s, v) => s + (Number(v) || 0), 0) / vals.length : 0;
+    });
+
+    const chartCfg2 = {
+      type: "bar",
+      data: {
+        labels: formLabels,
+        datasets: [
+          { label: L.avgHeader ?? "Moyenne", data: formAvgs },
+          { label: L.targetHeader ?? "Cible", data: formAvgs.map(() => cible) },
+        ],
+      },
+      options: {
+        indexAxis: "y",
+        plugins: {
+          legend: { position: "bottom" },
+          title: { display: true, text: L.sheet3Title },
+        },
+        scales: { x: { suggestedMin: 0, suggestedMax: 4 } },
+      },
+    };
+
+    const qcUrl2 = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartCfg2))}&format=png&backgroundColor=white&width=1200&height=550`;
+    const img2Resp = await fetch(qcUrl2);
+    if (img2Resp.ok) {
+      const ab = await img2Resp.arrayBuffer();
+      const imgId = wb.addImage({ buffer: bufFrom(ab), extension: "png" });
+      ws3.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
+    } else {
+      ws3.addRow([L.chartError || "Erreur de génération du graphique"]);
     }
 
-    // ========== FEUILLE 4 : Meta ==========
+    // ===============================
+    // FEUILLE 4 — CAMEMBERT ATTENTES
+    // ===============================
     const ws4 = wb.addWorksheet(L.sheet4Title);
-    ws4.columns = [
-      { header: "", key: "k", width: 35 },
-      { header: "", key: "v", width: 80 },
-    ];
-    ws4.addRow([L.metaTitle]);
-    bold(ws4, 1);
-    ws4.addRow([L.formTitleMeta, form.title]);
-    ws4.addRow([L.trainer, form.trainerName ?? ""]);
-    ws4.addRow([L.date, form.sessionDate ? new Date(form.sessionDate).toLocaleDateString() : ""]);
-    ws4.addRow([L.location, form.location ?? ""]);
-    ws4.addRow([L.responsesCount, responses.length.toString()]);
+    ws4.getColumn(1).width = 160;
 
-    // ========== Génération du fichier ==========
-    const filenameSafe = `${(form.title || "rapport").replace(/[^a-z0-9_\-]+/gi, "_")}_${lang.toUpperCase()}.xlsx`;
-    const buffer = await wb.xlsx.writeBuffer();
+    const pieCfg = {
+      type: "pie",
+      data: {
+        labels: [
+          L.expectYesLabel ?? "OUI",
+          L.expectPartialLabel ?? "PARTIELLEMENT",
+          L.expectNoLabel ?? "NON",
+        ],
+        datasets: [
+          {
+            data: [count.oui, count.partiel, count.non],
+          },
+        ],
+      },
+      options: {
+        plugins: {
+          legend: { position: "bottom" },
+          title: { display: true, text: L.sheet4Title },
+        },
+      },
+    };
 
-    return new NextResponse(buffer, {
+    const qcPie = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(pieCfg))}&format=png&backgroundColor=white&width=800&height=480`;
+    const imgPieResp = await fetch(qcPie);
+    if (imgPieResp.ok) {
+      const ab = await imgPieResp.arrayBuffer();
+      const imgId = wb.addImage({ buffer: bufFrom(ab), extension: "png" });
+      ws4.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 800, height: 480 } });
+    } else {
+      ws4.addRow([L.chartError || "Erreur de génération du graphique"]);
+    }
+
+    // --- Buffer Excel & réponse HTTP ---
+    const xbuf = await wb.xlsx.writeBuffer();
+    const fnameBase = (form.title || "evaluation").replace(/[^\p{L}\p{N}\-_ ]/gu, "").slice(0, 60);
+    const filename = `${fnameBase}_${(lang || "fr").toUpperCase()}.xlsx`;
+
+    return new NextResponse(xbuf as any, {
       status: 200,
       headers: {
-        "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "content-disposition": `attachment; filename="${filenameSafe}"`,
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Cache-Control": "no-store",
       },
     });
   } catch (e: any) {
     console.error(e);
-    return NextResponse.json({ error: e?.message ?? "Export failed" }, { status: 500 });
+    return NextResponse.json({ error: e?.message || "Export failed" }, { status: 500 });
   }
 }
