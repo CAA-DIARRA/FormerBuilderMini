@@ -53,23 +53,13 @@ export async function GET(
       return NextResponse.json({ error: "Form not found" }, { status: 404 });
     }
 
-    // --- réponses (ne pas utiliser select: { data: true } car le champ peut s'appeler autrement) ---
-    const rawAny = await prisma.response.findMany({
+    // --- réponses (on ne dépend pas d'un champ createdAt : tri par id) ---
+    const raw = await prisma.response.findMany({
       where: { formId: form.id },
       orderBy: { id: "asc" },
+      select: { data: true }, // data JSON
     });
-
-    const participants: RespRow[] = rawAny.map((r: any) => {
-      // Essaye plusieurs noms possibles pour le JSON
-      const d =
-        r.data ??
-        r.payload ??
-        r.values ??
-        r.json ??
-        r.body ??
-        null;
-      return (d ?? {}) as RespRow;
-    });
+    const participants: RespRow[] = raw.map((r) => r.data as RespRow);
 
     // --- Excel ---
     const wb = new ExcelJS.Workbook();
@@ -81,7 +71,8 @@ export async function GET(
     const headerFill = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FF1A73E8" } };
     const white = { argb: "FFFFFFFF" };
 
-    const cible = L.cibleValue ?? 2.5; // cible par défaut si non précisé dans labels
+    // 👉 cible fixe (pas dans les labels)
+    const cible = 2.5;
 
     // ===============================
     // FEUILLE 1 — SYNTHÈSE (tableaux)
@@ -115,6 +106,7 @@ export async function GET(
 
     // En-tête pour les blocs critère
     const makeHeader = (title: string) => {
+      // Titre de groupe (merge sur toutes les colonnes)
       const colsCount = 1 + participants.length + 2; // Critère + N participants + (Moyenne, Cible)
       const r = ws1.addRow([title]);
       ws1.mergeCells(r.number, 1, r.number, colsCount);
@@ -122,6 +114,7 @@ export async function GET(
       r.fill = grayFill;
       r.alignment = { vertical: "middle", horizontal: "left" };
 
+      // Ligne d’entête
       const head = ws1.addRow([
         L.criteriaHeader ?? "Critère",
         ...initials,
@@ -132,6 +125,7 @@ export async function GET(
       head.fill = headerFill;
       head.alignment = { vertical: "middle", horizontal: "center" };
 
+      // Largeurs
       const widths = [40, ...Array(initials.length).fill(8), 10, 10];
       widths.forEach((w, i) => (ws1.getColumn(i + 1).width = w));
     };
@@ -228,6 +222,7 @@ export async function GET(
     const ws2 = wb.addWorksheet(L.sheet2Title);
     ws2.getColumn(1).width = 160;
 
+    // Moyennes par critère (Contenu)
     const contKeys = L.contRows.map((r) => r.key);
     const contLabels = L.contRows.map((r) => r.label);
     const contAvgs = contKeys.map((k) => {
@@ -235,6 +230,7 @@ export async function GET(
       return vals.length ? vals.reduce((s, v) => s + (Number(v) || 0), 0) / vals.length : 0;
     });
 
+    // Image QuickChart barres
     const chartCfg1 = {
       type: "bar",
       data: {
@@ -312,6 +308,13 @@ export async function GET(
     const ws4 = wb.addWorksheet(L.sheet4Title);
     ws4.getColumn(1).width = 160;
 
+    const resAtt2 = participants.map((p) => p.reponduAttentes || "");
+    const count2 = {
+      oui: resAtt2.filter((x) => x === "OUI").length,
+      partiel: resAtt2.filter((x) => x === "PARTIELLEMENT").length,
+      non: resAtt2.filter((x) => x === "NON").length,
+    };
+
     const pieCfg = {
       type: "pie",
       data: {
@@ -321,7 +324,9 @@ export async function GET(
           L.expectNoLabel ?? "NON",
         ],
         datasets: [
-          { data: [count.oui, count.partiel, count.non] },
+          {
+            data: [count2.oui, count2.partiel, count2.non],
+          },
         ],
       },
       options: {
