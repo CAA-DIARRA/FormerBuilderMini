@@ -273,7 +273,7 @@ export async function GET(
           legend: { position: "bottom" },
           title: { display: true, text: L.sheet2Title },
         },
-        scales: { x: { suggestedMin: 0, suggestedMax: 4 } },
+        scales: { x: { suggestedMin: 0, suggestedMax: 5 } },
       },
     };
 
@@ -317,7 +317,7 @@ export async function GET(
           legend: { position: "bottom" },
           title: { display: true, text: L.sheet3Title },
         },
-        scales: { x: { suggestedMin: 0, suggestedMax: 4 } },
+        scales: { x: { suggestedMin: 0, suggestedMax: 5 } },
       },
     };
 
