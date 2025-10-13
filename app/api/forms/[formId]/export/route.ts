@@ -6,9 +6,10 @@ import { LABELS } from "../../../../lib/labels";
 
 const prisma = new PrismaClient();
 
-// Petit helper: ArrayBuffer -> Node Buffer (ExcelJS addImage attend un Buffer)
+// Helper pour convertir ArrayBuffer -> Buffer (ExcelJS)
 const bufFrom = (ab: ArrayBuffer) => Buffer.from(new Uint8Array(ab));
 
+// Structure d'une réponse de participant
 type RespRow = {
   participantNom?: string | null;
   participantPrenoms?: string | null;
@@ -42,26 +43,53 @@ export async function GET(
   { params }: { params: { formId: string } }
 ) {
   try {
-    // --- langue ---
+    // --- Détection de la langue ---
     const url = new URL(req.url);
     const lang = (url.searchParams.get("lang") === "en" ? "en" : "fr") as "fr" | "en";
     const L = LABELS[lang];
 
-    // --- données de base du formulaire ---
+    // --- Récupération du formulaire ---
     const form = await prisma.form.findUnique({ where: { id: params.formId } });
     if (!form) {
       return NextResponse.json({ error: "Form not found" }, { status: 404 });
     }
 
-    // --- réponses (on ne dépend pas d'un champ createdAt : tri par id) ---
+    // --- Récupération des réponses (pas de champ data JSON ici) ---
     const raw = await prisma.response.findMany({
       where: { formId: form.id },
       orderBy: { id: "asc" },
-      select: { data: true }, // data JSON
     });
-    const participants: RespRow[] = raw.map((r) => r.data as RespRow);
 
-    // --- Excel ---
+    // Conversion en structure RespRow
+    const participants: RespRow[] = raw.map((r: any) => ({
+      participantNom: r.participantNom ?? null,
+      participantPrenoms: r.participantPrenoms ?? null,
+      participantEntreprise: r.participantEntreprise ?? null,
+
+      envAccueil: r.envAccueil ?? null,
+      envLieu: r.envLieu ?? null,
+      envMateriel: r.envMateriel ?? null,
+
+      contAttentes: r.contAttentes ?? null,
+      contUtiliteTravail: r.contUtiliteTravail ?? null,
+      contExercices: r.contExercices ?? null,
+      contMethodologie: r.contMethodologie ?? null,
+      contSupports: r.contSupports ?? null,
+      contRythme: r.contRythme ?? null,
+      contGlobal: r.contGlobal ?? null,
+
+      formMaitrise: r.formMaitrise ?? null,
+      formCommunication: r.formCommunication ?? null,
+      formClarte: r.formClarte ?? null,
+      formMethodo: r.formMethodo ?? null,
+      formGlobal: r.formGlobal ?? null,
+
+      reponduAttentes: r.reponduAttentes ?? null,
+      formationsComplementaires: r.formationsComplementaires ?? null,
+      temoignage: r.temoignage ?? null,
+    }));
+
+    // --- Création du fichier Excel ---
     const wb = new ExcelJS.Workbook();
     wb.creator = "FormerBuilder";
     wb.created = new Date();
@@ -71,16 +99,15 @@ export async function GET(
     const headerFill = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FF1A73E8" } };
     const white = { argb: "FFFFFFFF" };
 
-    // 👉 cible fixe (pas dans les labels)
+    // Cible fixe
     const cible = 2.5;
 
     // ===============================
-    // FEUILLE 1 — SYNTHÈSE (tableaux)
+    // FEUILLE 1 — SYNTHÈSE
     // ===============================
     const ws1 = wb.addWorksheet(L.sheet1Title);
     ws1.properties.defaultRowHeight = 18;
 
-    // Meta haut de page
     ws1.addRow([L.formTitle || "Fiche formation"]);
     ws1.mergeCells("A1:E1");
     ws1.getCell("A1").font = { bold: true, size: 14 };
@@ -94,27 +121,24 @@ export async function GET(
     meta.forEach((r) => ws1.addRow(r));
     ws1.addRow([]);
 
-    // Initiales colonnes dynamiques
+    // Initiales des participants
     const initials = participants.map((p, idx) => {
       const prenom = (p.participantPrenoms || "").trim();
       const nom = (p.participantNom || "").trim();
       if (!prenom && !nom) return `P${idx + 1}`;
-      const i1 = prenom ? prenom.trim()[0] : "";
-      const i2 = nom ? nom.trim()[0] : "";
-      return `${(i1 + i2).toUpperCase() || `P${idx + 1}`}`;
+      const i1 = prenom ? prenom[0].toUpperCase() : "";
+      const i2 = nom ? nom[0].toUpperCase() : "";
+      return i1 + i2 || `P${idx + 1}`;
     });
 
-    // En-tête pour les blocs critère
+    // Création d’un en-tête de section
     const makeHeader = (title: string) => {
-      // Titre de groupe (merge sur toutes les colonnes)
-      const colsCount = 1 + participants.length + 2; // Critère + N participants + (Moyenne, Cible)
+      const colsCount = 1 + participants.length + 2;
       const r = ws1.addRow([title]);
       ws1.mergeCells(r.number, 1, r.number, colsCount);
       r.font = { bold: true };
       r.fill = grayFill;
-      r.alignment = { vertical: "middle", horizontal: "left" };
 
-      // Ligne d’entête
       const head = ws1.addRow([
         L.criteriaHeader ?? "Critère",
         ...initials,
@@ -123,51 +147,42 @@ export async function GET(
       ]);
       head.font = { bold: true, color: white };
       head.fill = headerFill;
-      head.alignment = { vertical: "middle", horizontal: "center" };
-
-      // Largeurs
       const widths = [40, ...Array(initials.length).fill(8), 10, 10];
       widths.forEach((w, i) => (ws1.getColumn(i + 1).width = w));
     };
 
-    // Helper d’écriture d’un bloc de critères
+    // Bloc de critères
     function writeCriteriaBlock(rows: ReadonlyArray<{ key: string; label: string }>) {
       rows.forEach((r) => {
-        const vals = participants.map((p) => (p[r.key as keyof RespRow] ?? null) as number | null);
-        const avg =
-          vals.length ? vals.reduce((s, v) => s + (Number(v) || 0), 0) / vals.length : null;
-
-        const row = ws1.addRow([
-          r.label,
-          ...vals,
-          avg,
-          cible,
-        ]);
+        const vals = participants.map((p) => (p[r.key as keyof RespRow] as number | null) ?? null);
+        const avg = vals.length ? vals.reduce((s, v) => s + (Number(v) || 0), 0) / vals.length : null;
+        const row = ws1.addRow([r.label, ...vals, avg, cible]);
         row.alignment = { vertical: "middle" };
         row.height = 18;
       });
       ws1.addRow([]);
     }
 
-    // Blocs : Environnement / Contenu / Formateur(s)
+    // Environnement
     makeHeader(L.envTitle);
     writeCriteriaBlock(L.envRows);
 
+    // Contenu
     makeHeader(L.contTitle);
     writeCriteriaBlock(L.contRows);
 
+    // Formateur
     makeHeader(L.formTitle);
     writeCriteriaBlock(L.formRows);
 
-    // Bloc : Attentes (compte + %)
+    // --- Bloc Attentes ---
     const attTitle = ws1.addRow([L.expectTitle || "ATTENTES DES PARTICIPANTS"]);
     ws1.mergeCells(attTitle.number, 1, attTitle.number, 6);
     attTitle.font = { bold: true };
     attTitle.fill = grayFill;
-    attTitle.alignment = { vertical: "middle", horizontal: "left" };
 
     const resAtt = participants.map((p) => p.reponduAttentes || "");
-    const total = resAtt.filter((x) => x).length || 1;
+    const total = resAtt.filter(Boolean).length || 1;
     const count = {
       oui: resAtt.filter((x) => x === "OUI").length,
       partiel: resAtt.filter((x) => x === "PARTIELLEMENT").length,
@@ -180,41 +195,31 @@ export async function GET(
     };
 
     ws1.addRow([L.expectQuestion || "Cette formation a-t-elle répondu à vos attentes ?", "", "", "", "", "%"]);
-    ws1.addRow(["OUI", ...Array(participants.length).fill(""), "", "", "", `${pct.oui}%`]);
-    ws1.addRow(["PARTIELLEMENT", ...Array(participants.length).fill(""), "", "", "", `${pct.partiel}%`]);
-    ws1.addRow(["NON", ...Array(participants.length).fill(""), "", "", "", `${pct.non}%`]);
+    ws1.addRow(["OUI", "", "", "", "", `${pct.oui}%`]);
+    ws1.addRow(["PARTIELLEMENT", "", "", "", "", `${pct.partiel}%`]);
+    ws1.addRow(["NON", "", "", "", "", `${pct.non}%`]);
     ws1.addRow([]);
 
-    // Bloc : Formations complémentaires (liste)
+    // Formations complémentaires
     const compTitle = ws1.addRow([L.complementaryTitle || "Formations complémentaires envisagées"]);
     ws1.mergeCells(compTitle.number, 1, compTitle.number, 6);
     compTitle.font = { bold: true };
     compTitle.fill = grayFill;
 
-    const compList = participants
-      .map((p) => (p.formationsComplementaires || "").trim())
-      .filter(Boolean);
-    if (compList.length === 0) {
-      ws1.addRow([L.noneText || "—"]);
-    } else {
-      compList.forEach((txt, i) => ws1.addRow([`${i + 1}. ${txt}`]));
-    }
+    const compList = participants.map((p) => (p.formationsComplementaires || "").trim()).filter(Boolean);
+    if (compList.length === 0) ws1.addRow([L.noneText || "—"]);
+    else compList.forEach((txt, i) => ws1.addRow([`${i + 1}. ${txt}`]));
     ws1.addRow([]);
 
-    // Bloc : Témoignages (liste)
+    // Témoignages
     const temoTitle = ws1.addRow([L.testimonyTitle || "Témoignages des participants"]);
     ws1.mergeCells(temoTitle.number, 1, temoTitle.number, 6);
     temoTitle.font = { bold: true };
     temoTitle.fill = grayFill;
 
-    const temoList = participants
-      .map((p) => (p.temoignage || "").trim())
-      .filter(Boolean);
-    if (temoList.length === 0) {
-      ws1.addRow([L.noneText || "—"]);
-    } else {
-      temoList.forEach((txt, i) => ws1.addRow([`${i + 1}. ${txt}`]));
-    }
+    const temoList = participants.map((p) => (p.temoignage || "").trim()).filter(Boolean);
+    if (temoList.length === 0) ws1.addRow([L.noneText || "—"]);
+    else temoList.forEach((txt, i) => ws1.addRow([`${i + 1}. ${txt}`]));
 
     // ===============================
     // FEUILLE 2 — GRAPHIQUE CONTENU
@@ -222,7 +227,6 @@ export async function GET(
     const ws2 = wb.addWorksheet(L.sheet2Title);
     ws2.getColumn(1).width = 160;
 
-    // Moyennes par critère (Contenu)
     const contKeys = L.contRows.map((r) => r.key);
     const contLabels = L.contRows.map((r) => r.label);
     const contAvgs = contKeys.map((k) => {
@@ -230,7 +234,6 @@ export async function GET(
       return vals.length ? vals.reduce((s, v) => s + (Number(v) || 0), 0) / vals.length : 0;
     });
 
-    // Image QuickChart barres
     const chartCfg1 = {
       type: "bar",
       data: {
@@ -256,13 +259,11 @@ export async function GET(
       const ab = await img1Resp.arrayBuffer();
       const imgId = wb.addImage({ buffer: bufFrom(ab), extension: "png" });
       ws2.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
-    } else {
-      ws2.addRow([L.chartError || "Erreur de génération du graphique"]);
     }
 
-    // =================================
+    // ===============================
     // FEUILLE 3 — GRAPHIQUE FORMATEUR
-    // =================================
+    // ===============================
     const ws3 = wb.addWorksheet(L.sheet3Title);
     ws3.getColumn(1).width = 160;
 
@@ -298,8 +299,6 @@ export async function GET(
       const ab = await img2Resp.arrayBuffer();
       const imgId = wb.addImage({ buffer: bufFrom(ab), extension: "png" });
       ws3.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
-    } else {
-      ws3.addRow([L.chartError || "Erreur de génération du graphique"]);
     }
 
     // ===============================
@@ -318,16 +317,8 @@ export async function GET(
     const pieCfg = {
       type: "pie",
       data: {
-        labels: [
-          L.expectYesLabel ?? "OUI",
-          L.expectPartialLabel ?? "PARTIELLEMENT",
-          L.expectNoLabel ?? "NON",
-        ],
-        datasets: [
-          {
-            data: [count2.oui, count2.partiel, count2.non],
-          },
-        ],
+        labels: ["OUI", "PARTIELLEMENT", "NON"],
+        datasets: [{ data: [count2.oui, count2.partiel, count2.non] }],
       },
       options: {
         plugins: {
@@ -343,14 +334,12 @@ export async function GET(
       const ab = await imgPieResp.arrayBuffer();
       const imgId = wb.addImage({ buffer: bufFrom(ab), extension: "png" });
       ws4.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 800, height: 480 } });
-    } else {
-      ws4.addRow([L.chartError || "Erreur de génération du graphique"]);
     }
 
-    // --- Buffer Excel & réponse HTTP ---
+    // --- Envoi du fichier Excel ---
     const xbuf = await wb.xlsx.writeBuffer();
     const fnameBase = (form.title || "evaluation").replace(/[^\p{L}\p{N}\-_ ]/gu, "").slice(0, 60);
-    const filename = `${fnameBase}_${(lang || "fr").toUpperCase()}.xlsx`;
+    const filename = `${fnameBase}_${lang.toUpperCase()}.xlsx`;
 
     return new NextResponse(xbuf as any, {
       status: 200,
