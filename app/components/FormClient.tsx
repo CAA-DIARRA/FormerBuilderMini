@@ -1,18 +1,30 @@
 // app/components/FormClient.tsx
 "use client";
 
-import { useMemo, useState } from "react";
+import React, { memo, useMemo, useState } from "react";
 
 type Lang = "fr" | "en";
 
-// Échelle 4→1 (Très bien → Mauvais)
+// ordre 4 → 3 → 2 → 1 (comme demandé)
 const scale = [4, 3, 2, 1];
 
-export default function FormClient({
-  form,
-  lang = "fr",
-}: { form: any; lang?: Lang }) {
-  // libellés FR/EN
+type FormDto = {
+  id: string;
+  slug: string;
+  title?: string | null;
+  trainerName?: string | null;
+  sessionDate?: string | null; // ISO string
+  location?: string | null;
+  isOpen: boolean;
+};
+
+type Props = {
+  form: FormDto;
+  lang?: Lang;
+};
+
+function FormClientInner({ form, lang = "fr" }: Props) {
+  // Libellés multilingues
   const T = useMemo(() => {
     if (lang === "en") {
       return {
@@ -50,16 +62,18 @@ export default function FormClient({
           global: "5. Overall evaluation of the trainer",
         },
 
-        synthTitle: "Synthesis",
+        synthTitle: "Summary",
         synthQ: "Did this training meet your expectations?",
-        opts: ["YES", "PARTIALLY", "NO"],
+        opts: ["YES", "PARTLY", "NO"],
 
         extraTitle: "Additional courses & Testimonial",
         extraQ1: "What complementary training would you consider?",
         extraQ2: "What testimonial can you leave about this training?",
         consent: "I authorize the publication of my testimonial",
 
+        // en-têtes au-dessus des radios (4→1)
         scaleH: ["Very good (4)", "Good (3)", "Fair (2)", "Poor (1)"],
+
         send: "Submit",
         ok: "Thank you for your feedback!",
         ko: "An error occurred while submitting.",
@@ -85,10 +99,10 @@ export default function FormClient({
         attentes: "1. Le contenu couvre-t-il vos attentes ?",
         utile: "2. Le contenu est-il utile pour votre travail ?",
         exos: "3. Comment avez-vous trouvé les exercices / exemples / vidéos ?",
-        methodo: "4. Comment avez-vous trouvé la méthodologie utilisée ?",
+        methodo: "4. Comment avez-vous trouvé la méthodologie utilisée pour la formation ?",
         supports: "5. Comment avez-vous trouvé les supports de la formation ?",
         rythme: "6. Comment avez-vous trouvé le rythme de la formation ?",
-        global: "7. Évaluation globale de la formation",
+        global: "Évaluation globale de la formation",
       },
 
       formTitle: "III. Le(s) Formateur(s)",
@@ -110,12 +124,14 @@ export default function FormClient({
       consent: "J’autorise la publication de mon témoignage",
 
       scaleH: ["Très bien (4)", "Bien (3)", "Passable (2)", "Mauvais (1)"],
+
       send: "Envoyer",
       ok: "Merci pour votre retour !",
       ko: "Une erreur est survenue lors de l’envoi.",
     };
-  }, [lang, form]);
+  }, [lang, form?.title, form?.trainerName, form?.location]);
 
+  // State contrôlé (initialisé une seule fois)
   const [loading, setLoading] = useState(false);
   const [vals, setVals] = useState<any>({
     participantNom: "",
@@ -148,6 +164,9 @@ export default function FormClient({
     consentementTemoignage: false,
   });
 
+  const safeDate =
+    form?.sessionDate ? new Date(form.sessionDate).toLocaleDateString() : "";
+
   const send = async () => {
     try {
       setLoading(true);
@@ -156,9 +175,9 @@ export default function FormClient({
         headers: { "content-type": "application/json" },
         body: JSON.stringify(vals),
       });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json?.error || "submit_failed");
+      if (!res.ok) throw new Error("submit_failed");
       alert(T.ok);
+      // reset doux
       setVals((s: any) => ({
         ...s,
         formationsComplementaires: "",
@@ -171,27 +190,31 @@ export default function FormClient({
     }
   };
 
-  const Section = ({ title, children }: any) => (
+  const Section = ({ title, children }: React.PropsWithChildren<{ title: string }>) => (
     <section className="border rounded-2xl p-4 space-y-4 bg-white">
       <h2 className="text-lg font-semibold">{title}</h2>
       {children}
     </section>
   );
 
+  // entête au-dessus des 4 radios (ordre 4→1)
   const ScaleHeader = () => (
     <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs text-neutral-600">
       <div className="col-span-2" />
       {T.scaleH.map((h: string) => (
-        <div key={h} className="text-center">{h}</div>
+        <div key={h} className="text-center">
+          {h}
+        </div>
       ))}
     </div>
   );
 
+  // une ligne de radios (ordre 4→1)
   const RadioRow = ({ label, name }: { label: string; name: keyof typeof vals }) => (
     <div className="grid grid-cols-2 md:grid-cols-6 items-center gap-2">
       <div className="col-span-2">{label}</div>
       {scale.map((v) => (
-        <label key={v} className="flex items-center justify-center gap-1">
+        <label key={`${String(name)}-${v}`} className="flex items-center justify-center gap-1">
           <input
             type="radio"
             name={name as string}
@@ -203,15 +226,11 @@ export default function FormClient({
     </div>
   );
 
-  const dStr = form?.sessionDate
-    ? new Date(form.sessionDate).toLocaleDateString()
-    : "";
-
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-6">
       <header className="space-y-1">
         <h1 className="text-2xl font-bold">{T.pageTitle}</h1>
-        <p className="text-sm">{T.headerLine(dStr)}</p>
+        <p className="text-sm">{T.headerLine(safeDate)}</p>
       </header>
 
       {/* PARTICIPANT */}
@@ -221,36 +240,25 @@ export default function FormClient({
             className="border rounded-xl p-2"
             placeholder={T.fields.lastName}
             value={vals.participantNom}
-            onChange={(e) =>
-              setVals((s: any) => ({ ...s, participantNom: e.target.value }))
-            }
+            onChange={(e) => setVals((s: any) => ({ ...s, participantNom: e.target.value }))}
           />
           <input
             className="border rounded-xl p-2"
             placeholder={T.fields.firstNames}
             value={vals.participantPrenoms}
-            onChange={(e) =>
-              setVals((s: any) => ({ ...s, participantPrenoms: e.target.value }))
-            }
+            onChange={(e) => setVals((s: any) => ({ ...s, participantPrenoms: e.target.value }))}
           />
           <input
             className="border rounded-xl p-2"
             placeholder={T.fields.role}
             value={vals.participantFonction}
-            onChange={(e) =>
-              setVals((s: any) => ({ ...s, participantFonction: e.target.value }))
-            }
+            onChange={(e) => setVals((s: any) => ({ ...s, participantFonction: e.target.value }))}
           />
           <input
             className="border rounded-xl p-2"
             placeholder={T.fields.company}
             value={vals.participantEntreprise}
-            onChange={(e) =>
-              setVals((s: any) => ({
-                ...s,
-                participantEntreprise: e.target.value,
-              }))
-            }
+            onChange={(e) => setVals((s: any) => ({ ...s, participantEntreprise: e.target.value }))}
           />
         </div>
       </Section>
@@ -265,12 +273,7 @@ export default function FormClient({
           className="w-full border rounded-xl p-2"
           placeholder={T.env.ameliors}
           value={vals.envAmeliorations}
-          onChange={(e) =>
-            setVals((s: any) => ({
-              ...s,
-              envAmeliorations: e.target.value,
-            }))
-          }
+          onChange={(e) => setVals((s: any) => ({ ...s, envAmeliorations: e.target.value }))}
         />
       </Section>
 
@@ -296,7 +299,7 @@ export default function FormClient({
         <RadioRow label={T.formSec.global} name={"formGlobal"} />
       </Section>
 
-      {/* SYNTHÈSE */}
+      {/* SYNTHESE */}
       <Section title={T.synthTitle}>
         <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
           <span>{T.synthQ}</span>
@@ -307,9 +310,7 @@ export default function FormClient({
                   type="radio"
                   name="reponduAttentes"
                   checked={vals.reponduAttentes === opt}
-                  onChange={() =>
-                    setVals((s: any) => ({ ...s, reponduAttentes: opt }))
-                  }
+                  onChange={() => setVals((s: any) => ({ ...s, reponduAttentes: opt }))}
                 />
                 <span className="text-sm">{opt}</span>
               </label>
@@ -318,36 +319,28 @@ export default function FormClient({
         </div>
       </Section>
 
-      {/* COMPLÉMENTS / TÉMOIGNAGE */}
+      {/* COMPLEMENTS / TEMOIGNAGE */}
       <Section title={T.extraTitle}>
         <textarea
           className="w-full border rounded-xl p-2"
           placeholder={T.extraQ1}
           value={vals.formationsComplementaires}
           onChange={(e) =>
-            setVals((s: any) => ({
-              ...s,
-              formationsComplementaires: e.target.value,
-            }))
+            setVals((s: any) => ({ ...s, formationsComplementaires: e.target.value }))
           }
         />
         <textarea
           className="w-full border rounded-xl p-2"
           placeholder={T.extraQ2}
           value={vals.temoignage}
-          onChange={(e) =>
-            setVals((s: any) => ({ ...s, temoignage: e.target.value }))
-          }
+          onChange={(e) => setVals((s: any) => ({ ...s, temoignage: e.target.value }))}
         />
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
             checked={vals.consentementTemoignage}
             onChange={(e) =>
-              setVals((s: any) => ({
-                ...s,
-                consentementTemoignage: e.target.checked,
-              }))
+              setVals((s: any) => ({ ...s, consentementTemoignage: e.target.checked }))
             }
           />
           <span>{T.consent}</span>
@@ -364,3 +357,6 @@ export default function FormClient({
     </div>
   );
 }
+
+// Empêche les re-render/remounts inutiles quand les props ne changent pas réellement
+export default memo(FormClientInner);
