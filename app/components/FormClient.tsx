@@ -5,8 +5,8 @@ import { useMemo, useState } from "react";
 
 type Lang = "fr" | "en";
 
-// Échelle 1..5 (de 5 vers 1 pour lire de “Très bien” vers “Mauvais”)
-const scale = [5, 4, 3, 2, 1];
+// Échelle 4→1 (Très bien → Mauvais)
+const scale = [4, 3, 2, 1];
 
 export default function FormClient({
   form,
@@ -52,7 +52,6 @@ export default function FormClient({
 
         synthTitle: "Synthesis",
         synthQ: "Did this training meet your expectations?",
-        // IMPORTANT: “PARTIALLY” (et non PARTLY) pour matcher l’API
         opts: ["YES", "PARTIALLY", "NO"],
 
         extraTitle: "Additional courses & Testimonial",
@@ -60,8 +59,7 @@ export default function FormClient({
         extraQ2: "What testimonial can you leave about this training?",
         consent: "I authorize the publication of my testimonial",
 
-        // 5 libellés pour 1..5
-        scaleH: ["Excellent (5)", "Very good (4)", "Good (3)", "Fair (2)", "Poor (1)"],
+        scaleH: ["Very good (4)", "Good (3)", "Fair (2)", "Poor (1)"],
         send: "Submit",
         ok: "Thank you for your feedback!",
         ko: "An error occurred while submitting.",
@@ -87,7 +85,7 @@ export default function FormClient({
         attentes: "1. Le contenu couvre-t-il vos attentes ?",
         utile: "2. Le contenu est-il utile pour votre travail ?",
         exos: "3. Comment avez-vous trouvé les exercices / exemples / vidéos ?",
-        methodo: "4. Comment avez-vous trouvé la méthodologie utilisée pour la formation ?",
+        methodo: "4. Comment avez-vous trouvé la méthodologie utilisée ?",
         supports: "5. Comment avez-vous trouvé les supports de la formation ?",
         rythme: "6. Comment avez-vous trouvé le rythme de la formation ?",
         global: "7. Évaluation globale de la formation",
@@ -111,8 +109,7 @@ export default function FormClient({
       extraQ2: "Quel témoignage pouvez-vous laisser de cette formation ?",
       consent: "J’autorise la publication de mon témoignage",
 
-      // 5 libellés pour 1..5
-      scaleH: ["Excellent (5)", "Très bien (4)", "Bien (3)", "Passable (2)", "Mauvais (1)"],
+      scaleH: ["Très bien (4)", "Bien (3)", "Passable (2)", "Mauvais (1)"],
       send: "Envoyer",
       ok: "Merci pour votre retour !",
       ko: "Une erreur est survenue lors de l’envoi.",
@@ -126,24 +123,24 @@ export default function FormClient({
     participantFonction: "",
     participantEntreprise: "",
 
-    envAccueil: 5,
-    envLieu: 5,
-    envMateriel: 5,
+    envAccueil: 4,
+    envLieu: 4,
+    envMateriel: 4,
     envAmeliorations: "",
 
-    contAttentes: 5,
-    contUtiliteTravail: 5,
-    contExercices: 5,
-    contMethodologie: 5,
-    contSupports: 5,
-    contRythme: 5,
-    contGlobal: 5,
+    contAttentes: 4,
+    contUtiliteTravail: 4,
+    contExercices: 4,
+    contMethodologie: 4,
+    contSupports: 4,
+    contRythme: 4,
+    contGlobal: 4,
 
-    formMaitrise: 5,
-    formCommunication: 5,
-    formClarte: 5,
-    formMethodo: 5,
-    formGlobal: 5,
+    formMaitrise: 4,
+    formCommunication: 4,
+    formClarte: 4,
+    formMethodo: 4,
+    formGlobal: 4,
 
     reponduAttentes: lang === "en" ? "YES" : "OUI",
     formationsComplementaires: "",
@@ -162,9 +159,12 @@ export default function FormClient({
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error || "submit_failed");
       alert(T.ok);
-      // reset “doux”
-      setVals((s: any) => ({ ...s, formationsComplementaires: "", temoignage: "" }));
-    } catch (e: any) {
+      setVals((s: any) => ({
+        ...s,
+        formationsComplementaires: "",
+        temoignage: "",
+      }));
+    } catch {
       alert(T.ko);
     } finally {
       setLoading(false);
@@ -178,9 +178,8 @@ export default function FormClient({
     </section>
   );
 
-  // entête des colonnes (5 libellés)
   const ScaleHeader = () => (
-    <div className="grid grid-cols-2 md:grid-cols-7 gap-2 text-xs text-neutral-600">
+    <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs text-neutral-600">
       <div className="col-span-2" />
       {T.scaleH.map((h: string) => (
         <div key={h} className="text-center">{h}</div>
@@ -188,16 +187,14 @@ export default function FormClient({
     </div>
   );
 
-  // rangée avec 5 radios alignés sous les bons libellés
   const RadioRow = ({ label, name }: { label: string; name: keyof typeof vals }) => (
-    <div className="grid grid-cols-2 md:grid-cols-7 items-center gap-2">
+    <div className="grid grid-cols-2 md:grid-cols-6 items-center gap-2">
       <div className="col-span-2">{label}</div>
       {scale.map((v) => (
         <label key={v} className="flex items-center justify-center gap-1">
           <input
             type="radio"
             name={name as string}
-            value={v}
             checked={vals[name] === v}
             onChange={() => setVals((s: any) => ({ ...s, [name]: v }))}
           />
@@ -206,16 +203,15 @@ export default function FormClient({
     </div>
   );
 
-  const dStr =
-    form?.sessionDate ? new Date(form.sessionDate).toLocaleDateString() : "";
+  const dStr = form?.sessionDate
+    ? new Date(form.sessionDate).toLocaleDateString()
+    : "";
 
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-6">
       <header className="space-y-1">
         <h1 className="text-2xl font-bold">{T.pageTitle}</h1>
-        <p className="text-sm">
-          {T.headerLine(dStr)}
-        </p>
+        <p className="text-sm">{T.headerLine(dStr)}</p>
       </header>
 
       {/* PARTICIPANT */}
@@ -224,8 +220,6 @@ export default function FormClient({
           <input
             className="border rounded-xl p-2"
             placeholder={T.fields.lastName}
-            autoComplete="off"
-            inputMode="text"
             value={vals.participantNom}
             onChange={(e) =>
               setVals((s: any) => ({ ...s, participantNom: e.target.value }))
@@ -234,8 +228,6 @@ export default function FormClient({
           <input
             className="border rounded-xl p-2"
             placeholder={T.fields.firstNames}
-            autoComplete="off"
-            inputMode="text"
             value={vals.participantPrenoms}
             onChange={(e) =>
               setVals((s: any) => ({ ...s, participantPrenoms: e.target.value }))
@@ -244,8 +236,6 @@ export default function FormClient({
           <input
             className="border rounded-xl p-2"
             placeholder={T.fields.role}
-            autoComplete="off"
-            inputMode="text"
             value={vals.participantFonction}
             onChange={(e) =>
               setVals((s: any) => ({ ...s, participantFonction: e.target.value }))
@@ -254,11 +244,12 @@ export default function FormClient({
           <input
             className="border rounded-xl p-2"
             placeholder={T.fields.company}
-            autoComplete="off"
-            inputMode="text"
             value={vals.participantEntreprise}
             onChange={(e) =>
-              setVals((s: any) => ({ ...s, participantEntreprise: e.target.value }))
+              setVals((s: any) => ({
+                ...s,
+                participantEntreprise: e.target.value,
+              }))
             }
           />
         </div>
@@ -275,7 +266,10 @@ export default function FormClient({
           placeholder={T.env.ameliors}
           value={vals.envAmeliorations}
           onChange={(e) =>
-            setVals((s: any) => ({ ...s, envAmeliorations: e.target.value }))
+            setVals((s: any) => ({
+              ...s,
+              envAmeliorations: e.target.value,
+            }))
           }
         />
       </Section>
@@ -312,7 +306,6 @@ export default function FormClient({
                 <input
                   type="radio"
                   name="reponduAttentes"
-                  value={opt}
                   checked={vals.reponduAttentes === opt}
                   onChange={() =>
                     setVals((s: any) => ({ ...s, reponduAttentes: opt }))
