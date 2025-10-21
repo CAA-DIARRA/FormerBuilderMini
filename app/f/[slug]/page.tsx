@@ -1,55 +1,106 @@
-// app/f/[slug]/page.tsx
+import { PrismaClient } from "@prisma/client";
+import FormClient from "../../components/FormClient";
+import { notFound } from "next/navigation";
+
+// côté serveur
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+export default async function PublicFormPage({
+  params,
+  searchParams,
+}: {
+  params: { slug: string };
+  searchParams?: { lang?: string; debug?: string };
+}) {
+  const prisma = new PrismaClient();
+  const form = await prisma.form.findUnique({ where: { slug: params.slug } });
+  if (!form) return notFound();
+
+  // langue initiale venue de l'URL pour le premier rendu
+  const serverLang = (searchParams?.lang === "en" ? "en" : "fr") as "fr" | "en";
+
+  if (searchParams?.debug === "1") {
+    return (
+      <pre style={{ padding: 16 }}>
+        {"DEBUG VIEW\n\n"}
+        {JSON.stringify(
+          {
+            slug: params.slug,
+            lang: serverLang,
+            title: form.title,
+            trainerName: form.trainerName,
+            sessionDate: form.sessionDate,
+            location: form.location,
+            isOpen: form.isOpen,
+          },
+          null,
+          2
+        )}
+      </pre>
+    );
+  }
+
+  // on délègue le sélecteur de langue au client (pour persistance & URL)
+  return <ClientWrapper form={form} serverLang={serverLang} />;
+}
+
+/* ---------------- Client wrapper pour le toggle + synchro URL ---------------- */
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import FormClient from "../../components/FormClient";
-import { useParams, useSearchParams } from "next/navigation";
+import LanguageToggle, { type Lang } from "../../components/LanguageToggle";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-type FormDto = {
-  id: string;
-  slug: string;
-  title?: string | null;
-  trainerName?: string | null;
-  sessionDate?: string | null;
-  location?: string | null;
-  isOpen: boolean;
-};
-
-export default function PublicFormPage() {
-  const { slug } = useParams<{ slug: string }>();
+function ClientWrapper({ form, serverLang }: { form: any; serverLang: Lang }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const sp = useSearchParams();
 
-  const [form, setForm] = useState<FormDto | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // source de vérité côté client :
+  const [lang, setLang] = useState<Lang>(serverLang);
 
-  // langue stable : ?lang=en | fr sinon détection 1 seule fois
-  const lang = useMemo<"fr" | "en">(() => {
-    const q = sp?.get("lang");
-    if (q === "en") return "en";
-    if (q === "fr") return "fr";
-    const nav = typeof navigator !== "undefined" ? navigator.language : "fr";
-    return nav.toLowerCase().startsWith("en") ? "en" : "fr";
-  }, [sp]);
-
+  // au mount : si pas de ?lang dans l’URL, on essaie localStorage
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        setError(null);
-        const res = await fetch(`/api/forms/by-slug/${slug}`, { cache: "no-store" });
-        if (!res.ok) throw new Error("not_found");
-        const j = await res.json();
-        if (!cancelled) setForm(j.form);
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message || "load_failed");
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [slug]);
+    const urlLang = sp.get("lang");
+    if (urlLang === "fr" || urlLang === "en") {
+      setLang(urlLang);
+      localStorage.setItem("ui-lang", urlLang);
+      return;
+    }
+    const saved = (localStorage.getItem("ui-lang") as Lang) || serverLang;
+    setLang(saved);
+    // maj URL sans recharger
+    const q = new URLSearchParams(Array.from(sp.entries()));
+    q.set("lang", saved);
+    router.replace(`${pathname}?${q.toString()}`);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  if (error) return <div className="p-6">Not found</div>;
-  if (!form) return <div className="p-6">Loading…</div>;
+  // quand on clique sur le toggle → maj state + localStorage + URL
+  const onLangChange = (next: Lang) => {
+    setLang(next);
+    localStorage.setItem("ui-lang", next);
+    const q = new URLSearchParams(Array.from(sp.entries()));
+    q.set("lang", next);
+    router.replace(`${pathname}?${q.toString()}`);
+  };
 
-  // IMPORTANT : pas de key qui change, on passe des props stables
-  return <FormClient form={form} lang={lang} />;
+  // petit header flottant (toggle)
+  const ToggleBar = useMemo(
+    () => (
+      <div className="w-full flex justify-end p-4">
+        <LanguageToggle value={lang} onChange={onLangChange} />
+      </div>
+    ),
+    [lang]
+  );
+
+  return (
+    <div className="min-h-screen bg-neutral-50">
+      {ToggleBar}
+      <FormClient form={form} lang={lang} />
+    </div>
+  );
 }
