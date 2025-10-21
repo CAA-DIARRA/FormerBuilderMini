@@ -12,15 +12,14 @@ export default function LanguageToggle({
   labelFr = "Français",
   labelEn = "English",
 }: {
-  value?: Lang;                 // langue courante (optionnel)
-  onChange?: (lang: Lang) => void; // callback (optionnel)
+  value?: Lang;
+  onChange?: (lang: Lang) => void;
   className?: string;
   labelFr?: string;
   labelEn?: string;
 }) {
   const [lang, setLang] = useState<Lang>("fr");
 
-  // init depuis localStorage si pas de value fournie
   useEffect(() => {
     if (value) { setLang(value); return; }
     const saved = (localStorage.getItem("ui-lang") as Lang) || "fr";
@@ -29,7 +28,7 @@ export default function LanguageToggle({
 
   const setBoth = (next: Lang) => {
     setLang(next);
-    localStorage.setItem("ui-lang", next);
+    try { localStorage.setItem("ui-lang", next); } catch {}
     onChange?.(next);
   };
 
