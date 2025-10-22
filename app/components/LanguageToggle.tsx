@@ -21,14 +21,19 @@ export default function LanguageToggle({
   const [lang, setLang] = useState<Lang>("fr");
 
   useEffect(() => {
-    if (value) { setLang(value); return; }
+    if (value) {
+      setLang(value);
+      return;
+    }
     const saved = (localStorage.getItem("ui-lang") as Lang) || "fr";
     setLang(saved);
   }, [value]);
 
   const setBoth = (next: Lang) => {
     setLang(next);
-    try { localStorage.setItem("ui-lang", next); } catch {}
+    try {
+      localStorage.setItem("ui-lang", next);
+    } catch {}
     onChange?.(next);
   };
 
