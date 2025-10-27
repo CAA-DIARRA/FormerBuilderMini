@@ -1,6 +1,5 @@
-// app/dashboard/page.tsx
 import { PrismaClient } from "@prisma/client";
-import DashboardClient from "./DashboardClient";
+import DashboardClient, { type FormRow, type Stats } from "./DashboardClient";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -8,38 +7,29 @@ export const runtime = "nodejs";
 const prisma = new PrismaClient();
 
 export default async function DashboardPage() {
-  // 1) Stats en parallèle
+  // Stats haut de page
   const [totalForms, totalResponses, activeForms] = await Promise.all([
     prisma.form.count(),
     prisma.response.count(),
     prisma.form.count({ where: { isOpen: true } }),
   ]);
 
-  // 2) Liste des formulaires
-  const formsRaw = await prisma.form.findMany({
+  // Données des formulaires
+  const rows = await prisma.form.findMany({
     orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      title: true,
-      slug: true,
-      isOpen: true,
-      createdAt: true, // Date côté serveur
-    },
+    select: { id: true, title: true, slug: true, isOpen: true, createdAt: true },
   });
 
-  // 3) Sérialisation (toujours string ISO)
-  const forms = formsRaw.map((f) => ({
+  // Normalisation stricte pour le composant client
+  const forms: FormRow[] = rows.map((f) => ({
     id: f.id,
-    title: f.title ?? "Sans titre",
+    title: f.title,
     slug: f.slug,
     isOpen: f.isOpen,
-    createdAt: f.createdAt.toISOString(), // <- string
+    createdAt: f.createdAt ? f.createdAt.toISOString() : new Date().toISOString(),
   }));
 
-  return (
-    <DashboardClient
-      forms={forms}
-      stats={{ totalForms, totalResponses, activeForms }}
-    />
-  );
+  const stats: Stats = { totalForms, totalResponses, activeForms };
+
+  return <DashboardClient forms={forms} stats={stats} />;
 }
