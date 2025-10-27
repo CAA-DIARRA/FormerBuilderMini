@@ -1,17 +1,21 @@
 // app/dashboard/DashboardClient.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import LanguageToggle, { type Lang } from "../components/LanguageToggle";
-import ExportButtons from "../components/ExportButtons";
-import { Plus, Eye, Share2, QrCode, BarChart3, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { useMemo } from "react";
 
 type FormRow = {
   id: string;
   title: string | null;
-  createdAt: string | Date;
+  slug: string;
   isOpen: boolean;
-  slug: string | null;
+  createdAt: string | null; // ISO string (vient du Server Component)
+};
+
+type Stats = {
+  totalForms: number;
+  totalResponses: number;
+  activeForms: number;
 };
 
 export default function DashboardClient({
@@ -19,200 +23,119 @@ export default function DashboardClient({
   stats,
 }: {
   forms: FormRow[];
-  stats: { totalForms: number; totalResponses: number; activeForms: number };
+  stats: Stats;
 }) {
-  const [lang, setLang] = useState<Lang>("fr");
+  const pretty = useMemo(
+    () => ({
+      total: stats?.totalForms ?? 0,
+      responses: stats?.totalResponses ?? 0,
+      active: stats?.activeForms ?? 0,
+    }),
+    [stats]
+  );
 
-  useEffect(() => {
-    const saved = (localStorage.getItem("ui-lang") as Lang) || "fr";
-    setLang(saved);
-  }, []);
-
-  const T = useMemo(() => {
-    if (lang === "en") {
-      return {
-        title: "Dashboard",
-        kpis: {
-          totalForms: "Total forms",
-          totalResponses: "Total responses",
-          activeForms: "Active forms",
-        },
-        newForm: "New form",
-        table: {
-          num: "#",
-          formTitle: "Form title",
-          createdOn: "Created on",
-          actions: "Actions",
-          status: {
-            active: "Active",
-            draft: "Draft",
-          },
-        },
-        actions: {
-          view: "View",
-          share: "Share",
-          qr: "QR code",
-          analytics: "Analytics",
-          delete: "Delete",
-        },
-      };
+  const onShare = async (f: FormRow) => {
+    const url = `${window.location.origin}/f/${f.slug}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: f.title ?? "Formulaire", url });
+        return;
+      } catch {
+        /* noop */
+      }
     }
-    return {
-      title: "Tableau de bord",
-      kpis: {
-        totalForms: "Total formulaires",
-        totalResponses: "Total réponses",
-        activeForms: "Formulaires actifs",
-      },
-      newForm: "Nouveau formulaire",
-      table: {
-        num: "#",
-        formTitle: "Titre du formulaire",
-        createdOn: "Créé le",
-        actions: "Actions",
-        status: {
-          active: "Actif",
-          draft: "Brouillon",
-        },
-      },
-      actions: {
-        view: "Voir",
-        share: "Partager",
-        qr: "QR code",
-        analytics: "Statistiques",
-        delete: "Supprimer",
-      },
-    };
-  }, [lang]);
+    await navigator.clipboard.writeText(url);
+    alert("Lien copié dans le presse-papiers");
+  };
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">{T.title}</h1>
-        <div className="flex items-center gap-2">
-          <LanguageToggle
-            value={lang}
-            onChange={(next) => {
-              setLang(next);
-              try {
-                localStorage.setItem("ui-lang", next);
-              } catch {}
-            }}
-          />
-          <a
-            href="/dashboard/new"
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-black text-white"
-          >
-            <Plus className="w-4 h-4" />
-            {T.newForm}
-          </a>
-        </div>
-      </div>
+    <div className="max-w-6xl mx-auto p-6 space-y-6">
+      <header className="space-y-1">
+        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <p className="text-sm text-neutral-600">
+          {pretty.total} formulaires • {pretty.responses} réponses • {pretty.active} actifs
+        </p>
+      </header>
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="rounded-2xl border p-4 bg-white">
-          <div className="text-sm text-neutral-600">{T.kpis.totalForms}</div>
-          <div className="text-3xl font-semibold mt-2">{stats.totalForms}</div>
-        </div>
-        <div className="rounded-2xl border p-4 bg-white">
-          <div className="text-sm text-neutral-600">
-            {T.kpis.totalResponses}
-          </div>
-          <div className="text-3xl font-semibold mt-2">
-            {stats.totalResponses}
-          </div>
-        </div>
-        <div className="rounded-2xl border p-4 bg-white">
-          <div className="text-sm text-neutral-600">{T.kpis.activeForms}</div>
-          <div className="text-3xl font-semibold mt-2">{stats.activeForms}</div>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="overflow-x-auto rounded-2xl border bg-white">
-        <table className="min-w-full">
-          <thead className="bg-neutral-50 text-left">
+      <div className="overflow-x-auto border rounded-2xl bg-white">
+        <table className="min-w-full text-sm">
+          <thead className="bg-neutral-50">
             <tr>
-              <th className="px-4 py-3 w-12">{T.table.num}</th>
-              <th className="px-4 py-3">{T.table.formTitle}</th>
-              <th className="px-4 py-3">{T.table.createdOn}</th>
-              <th className="px-4 py-3">{T.table.actions}</th>
+              <th className="text-left p-3">Titre</th>
+              <th className="text-left p-3">Slug</th>
+              <th className="text-left p-3">Créé le</th>
+              <th className="text-left p-3">Statut</th>
+              <th className="text-left p-3">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {forms.map((f, idx) => (
+            {forms.length === 0 && (
+              <tr>
+                <td className="p-3" colSpan={5}>
+                  Aucun formulaire
+                </td>
+              </tr>
+            )}
+
+            {forms.map((f) => (
               <tr key={f.id} className="border-t">
-                <td className="px-4 py-3">{idx + 1}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{f.title ?? "—"}</span>
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded-full ${
-                        f.isOpen
-                          ? "bg-black text-white"
-                          : "bg-neutral-200 text-neutral-700"
-                      }`}
-                    >
-                      {f.isOpen ? T.table.status.active : T.table.status.draft}
-                    </span>
-                  </div>
+                <td className="p-3">{f.title ?? "Sans titre"}</td>
+                <td className="p-3">{f.slug}</td>
+                <td className="p-3">
+                  {f.createdAt
+                    ? new Date(f.createdAt).toLocaleDateString()
+                    : "—"}
                 </td>
-                <td className="px-4 py-3">
-                  {new Date(f.createdAt).toLocaleDateString()}
+                <td className="p-3">
+                  <span className={f.isOpen ? "text-green-700" : "text-neutral-500"}>
+                    {f.isOpen ? "Actif" : "Brouillon"}
+                  </span>
                 </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={`/dashboard/forms/${f.id}`}
-                      title={T.actions.view}
-                      className="h-9 w-9 inline-flex items-center justify-center rounded-xl border hover:bg-neutral-100"
+                <td className="p-3">
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      href={`/f/${f.slug}`}
+                      className="px-2 py-1 rounded border hover:bg-neutral-50"
+                      target="_blank"
                     >
-                      <Eye className="w-4 h-4" />
-                    </a>
-                    <button
-                      title={T.actions.share}
-                      className="h-9 w-9 inline-flex items-center justify-center rounded-xl border bg-white hover:bg-neutral-100"
-                    >
-                      <Share2 className="w-4 h-4" />
-                    </button>
-                    <a
-                      href={`/dashboard/forms/${f.id}/qrcode`}
-                      title={T.actions.qr}
-                      className="h-9 w-9 inline-flex items-center justify-center rounded-xl border hover:bg-neutral-100"
-                    >
-                      <QrCode className="w-4 h-4" />
-                    </a>
-                    <a
-                      href={`/dashboard/forms/${f.id}/analytics`}
-                      title={T.actions.analytics}
-                      className="h-9 w-9 inline-flex items-center justify-center rounded-xl border hover:bg-neutral-100"
-                    >
-                      <BarChart3 className="w-4 h-4" />
-                    </a>
-
-                    {/* --- Export Excel (langue auto) --- */}
-                    <ExportButtons formId={f.id} size="sm" />
+                      Ouvrir
+                    </Link>
 
                     <button
-                      title={T.actions.delete}
-                      className="h-9 w-9 inline-flex items-center justify-center rounded-xl border hover:bg-neutral-100"
+                      onClick={() => onShare(f)}
+                      className="px-2 py-1 rounded border hover:bg-neutral-50"
                     >
-                      <Trash2 className="w-4 h-4 text-red-500" />
+                      Partager
                     </button>
+
+                    {/* Bouton Rapport (page analytics) */}
+                    <Link
+                      href={`/forms/${f.id}/report?lang=fr`}
+                      className="px-2 py-1 rounded border hover:bg-neutral-50"
+                      title="Voir statistiques, réponses agrégées et graphiques"
+                    >
+                      Rapport
+                    </Link>
+
+                    {/* (Optionnel) Exports Excel FR/EN */}
+                    <a
+                      href={`/api/forms/${f.id}/export?lang=fr`}
+                      className="px-2 py-1 rounded border hover:bg-neutral-50"
+                      title="Exporter en Excel (FR)"
+                    >
+                      Export FR
+                    </a>
+                    <a
+                      href={`/api/forms/${f.id}/export?lang=en`}
+                      className="px-2 py-1 rounded border hover:bg-neutral-50"
+                      title="Exporter en Excel (EN)"
+                    >
+                      Export EN
+                    </a>
                   </div>
                 </td>
               </tr>
             ))}
-
-            {forms.length === 0 && (
-              <tr>
-                <td className="px-4 py-6 text-center text-neutral-500" colSpan={4}>
-                  {lang === "en" ? "No form yet" : "Aucun formulaire pour le moment"}
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
