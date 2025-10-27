@@ -1,15 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { Eye, Share2, QrCode, BarChart3, Trash2 } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  Eye,
+  Share2,
+  QrCode,
+  BarChart3,
+  Trash2,
+} from "lucide-react";
+import LanguageToggle from "../components/LanguageToggle";
 
 export type FormRow = {
   id: string;
   title: string;
   slug: string;
   isOpen: boolean;
-  createdAt: string; // ISO string
+  createdAt: string | Date | null;
 };
 
 export type Stats = {
@@ -18,133 +26,290 @@ export type Stats = {
   activeForms: number;
 };
 
-export default function DashboardClient({
-  forms,
-  stats,
-}: {
+type Props = {
   forms: FormRow[];
   stats: Stats;
-}) {
-  const fmtDate = (iso: string) =>
-    new Date(iso).toLocaleDateString(undefined, {
+};
+
+const pill = (txt: string, variant: "active" | "draft" = "active") =>
+  variant === "active" ? (
+    <span className="inline-flex items-center px-2 py-0.5 text-xs rounded-full bg-black text-white">
+      {txt}
+    </span>
+  ) : (
+    <span className="inline-flex items-center px-2 py-0.5 text-xs rounded-full bg-neutral-200 text-neutral-700">
+      {txt}
+    </span>
+  );
+
+export default function DashboardClient({ forms, stats }: Props) {
+  const searchParams = useSearchParams();
+  const lang = searchParams.get("lang") === "en" ? "en" : "fr";
+
+  /* ---------- i18n ---------- */
+  const T = useMemo(() => {
+    if (lang === "en") {
+      return {
+        title: "Dashboard",
+        cards: {
+          totalForms: "Total forms",
+          totalResponses: "Total responses",
+          activeForms: "Active forms",
+        },
+        table: {
+          thIndex: "#",
+          thTitle: "Dashboard",
+          thCreated: "Created on",
+          thActions: "Actions",
+        },
+        statusActive: "Active",
+        statusDraft: "Draft",
+        btn: {
+          newForm: "New form",
+          open: "Open",
+          share: "Share",
+          qr: "QR",
+          report: "Report",
+          delete: "Delete",
+          exportFR: "Export FR",
+          exportEN: "Export EN",
+        },
+        confirmDelete: "Delete this form and its responses?",
+        sharedCopied: "Public link copied!",
+      };
+    }
+    return {
+      title: "Tableau de bord",
+      cards: {
+        totalForms: "Total formulaires",
+        totalResponses: "Total réponses",
+        activeForms: "Formulaires actifs",
+      },
+      table: {
+        thIndex: "#",
+        thTitle: "Tableau de bord",
+        thCreated: "Créé le",
+        thActions: "Actions",
+      },
+      statusActive: "Actif",
+      statusDraft: "Brouillon",
+      btn: {
+        newForm: "Nouveau formulaire",
+        open: "Ouvrir",
+        share: "Partager",
+        qr: "QR",
+        report: "Rapport",
+        delete: "Supprimer",
+        exportFR: "Export FR",
+        exportEN: "Export EN",
+      },
+      confirmDelete: "Supprimer ce formulaire et ses réponses ?",
+      sharedCopied: "Lien public copié !",
+    };
+  }, [lang]);
+
+  const baseUrl =
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    (typeof window !== "undefined" ? window.location.origin : "");
+
+  const fmtDate = (d: string | Date | null) => {
+    if (!d) return "";
+    const date = typeof d === "string" ? new Date(d) : d;
+    return date.toLocaleDateString(undefined, {
       year: "numeric",
       month: "numeric",
       day: "numeric",
     });
+  };
 
-  const copyShare = useCallback(async (slug: string) => {
-    const url = `${location.origin}/f/${slug}`;
+  const copy = async (txt: string) => {
     try {
-      await navigator.clipboard.writeText(url);
-      alert("Lien copié dans le presse-papiers");
+      await navigator.clipboard.writeText(txt);
+      // feedback simple
+      alert(T.sharedCopied);
     } catch {
-      prompt("Copiez l’URL :", url);
+      // fallback
+      prompt("Copy this link", txt);
     }
-  }, []);
+  };
+
+  const openQR = (url: string) => {
+    const qr = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+      url
+    )}`;
+    window.open(qr, "_blank");
+  };
 
   const onDelete = useCallback(async (id: string) => {
-    if (!confirm("Supprimer ce formulaire ? Cette action est irréversible.")) return;
+    if (!confirm(T.confirmDelete)) return;
     const res = await fetch(`/api/forms/${id}`, { method: "DELETE" });
-    if (res.ok) location.reload();
-    else alert("Suppression impossible.");
-  }, []);
+    if (res.ok) {
+      location.reload();
+    } else {
+      alert("Delete failed");
+    }
+  }, [T.confirmDelete]);
 
   return (
-    <div className="mx-auto max-w-7xl p-6 space-y-6">
-      {/* Titre */}
-      <h1 className="text-3xl font-bold">Tableau de bord</h1>
-
-      {/* Cartes de stats (même look que ta capture) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard title="Total formulaires" value={stats.totalForms} icon={<DocumentIcon />} />
-        <StatCard title="Total réponses" value={stats.totalResponses} icon={<UserIcon />} />
-        <StatCard title="Formulaires actifs" value={stats.activeForms} icon={<ChartIcon />} />
+    <div className="mx-auto max-w-7xl p-6 space-y-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <h1 className="text-3xl font-bold">{T.title}</h1>
+        <div className="flex items-center gap-3">
+          <LanguageToggle />
+          <Link
+            href={`/forms/new${lang ? `?lang=${lang}` : ""}`}
+            className="inline-flex items-center rounded-xl bg-black px-4 py-2 text-white hover:bg-neutral-800 transition"
+          >
+            + {T.btn.newForm}
+          </Link>
+        </div>
       </div>
 
-      {/* Tableau */}
-      <div className="rounded-2xl border border-neutral-200 bg-white overflow-hidden">
-        <table className="min-w-full text-sm">
-          <thead className="bg-neutral-50">
-            <tr className="text-left text-neutral-700">
-              <th className="px-4 py-3 w-12">#</th>
-              <th className="px-4 py-3">Tableau de bord</th>
-              <th className="px-4 py-3">Créé le</th>
-              <th className="px-4 py-3">Actions</th>
+      {/* Stat cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="rounded-2xl border p-5 bg-white">
+          <div className="text-sm text-neutral-500">{T.cards.totalForms}</div>
+          <div className="text-3xl font-semibold mt-1">{stats.totalForms}</div>
+        </div>
+        <div className="rounded-2xl border p-5 bg-white">
+          <div className="text-sm text-neutral-500">{T.cards.totalResponses}</div>
+          <div className="text-3xl font-semibold mt-1">{stats.totalResponses}</div>
+        </div>
+        <div className="rounded-2xl border p-5 bg-white">
+          <div className="text-sm text-neutral-500">{T.cards.activeForms}</div>
+          <div className="text-3xl font-semibold mt-1">{stats.activeForms}</div>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="overflow-hidden rounded-2xl border bg-white">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-neutral-50 text-left">
+              <th className="px-4 py-3 w-14">{T.table.thIndex}</th>
+              <th className="px-4 py-3">{T.table.thTitle}</th>
+              <th className="px-4 py-3 w-40">{T.table.thCreated}</th>
+              <th className="px-4 py-3 w-64">{T.table.thActions}</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-100">
-            {forms.map((f, i) => (
-              <tr key={f.id} className="align-middle">
-                <td className="px-4 py-4 text-neutral-500">{i + 1}</td>
+          <tbody>
+            {forms.map((f, i) => {
+              const publicUrl = `${baseUrl}/f/${f.slug}${
+                lang ? `?lang=${lang}` : ""
+              }`;
 
-                <td className="px-4 py-4">
-                  <div className="font-semibold">{f.title}</div>
-                  <div className="mt-2 flex items-center gap-3">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                        f.isOpen
-                          ? "bg-black text-white"
-                          : "bg-neutral-200 text-neutral-700"
-                      }`}
-                    >
-                      {f.isOpen ? "Actif" : "Brouillon"}
-                    </span>
+              return (
+                <tr key={f.id} className="border-t">
+                  {/* # */}
+                  <td className="px-4 py-4 align-top text-sm text-neutral-500">
+                    {i + 1}
+                  </td>
 
-                    {/* Barre de progression noire/grise comme sur la capture */}
-                    <div className="h-4 w-full max-w-xl rounded-full bg-neutral-200">
-                      <div
-                        className={`h-4 rounded-full ${
-                          f.isOpen ? "bg-black w-[85%]" : "bg-neutral-300 w-[70%]"
-                        }`}
-                      />
+                  {/* Title + status + progress bar-like */}
+                  <td className="px-4 py-4 align-top">
+                    <div className="font-semibold">{f.title}</div>
+                    <div className="mt-2 flex items-center gap-2">
+                      {f.isOpen
+                        ? pill(T.statusActive, "active")
+                        : pill(T.statusDraft, "draft")}
+                      <div className="flex-1 h-3 bg-neutral-200 rounded-full overflow-hidden">
+                        {/* simple “progress” look only */}
+                        <div
+                          className={`h-full rounded-full ${
+                            f.isOpen ? "bg-black" : "bg-neutral-300"
+                          }`}
+                          style={{ width: f.isOpen ? "85%" : "40%" }}
+                        />
+                      </div>
                     </div>
-                  </div>
-                </td>
+                  </td>
 
-                <td className="px-4 py-4 text-neutral-600">{fmtDate(f.createdAt)}</td>
+                  {/* Created */}
+                  <td className="px-4 py-4 align-top whitespace-nowrap">
+                    {fmtDate(f.createdAt)}
+                  </td>
 
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <IconButton title="Ouvrir" asLink href={`/f/${f.slug}`}>
-                      <Eye className="h-4 w-4" />
-                    </IconButton>
+                  {/* Actions */}
+                  <td className="px-4 py-4 align-top">
+                    <div className="flex items-center gap-2">
+                      {/* Ouvrir */}
+                      <Link
+                        href={`/f/${f.slug}${lang ? `?lang=${lang}` : ""}`}
+                        target="_blank"
+                        className="inline-flex items-center justify-center w-9 h-9 rounded-xl border hover:bg-neutral-50"
+                        title={T.btn.open}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Link>
 
-                    <IconButton title="Partager" onClick={() => copyShare(f.slug)}>
-                      <Share2 className="h-4 w-4" />
-                    </IconButton>
+                      {/* Partager */}
+                      <button
+                        onClick={() => copy(publicUrl)}
+                        className="inline-flex items-center justify-center w-9 h-9 rounded-xl border hover:bg-neutral-50"
+                        title={T.btn.share}
+                      >
+                        <Share2 className="w-4 h-4" />
+                      </button>
 
-                    <IconButton
-                      title="QR code"
-                      asLink
-                      href={`/forms/${f.id}/share`}
-                    >
-                      <QrCode className="h-4 w-4" />
-                    </IconButton>
+                      {/* QR Code */}
+                      <button
+                        onClick={() => openQR(publicUrl)}
+                        className="inline-flex items-center justify-center w-9 h-9 rounded-xl border hover:bg-neutral-50"
+                        title={T.btn.qr}
+                      >
+                        <QrCode className="w-4 h-4" />
+                      </button>
 
-                    <IconButton
-                      title="Rapport / Statistiques"
-                      asLink
-                      href={`/forms/${f.id}/report?lang=fr`}
-                    >
-                      <BarChart3 className="h-4 w-4" />
-                    </IconButton>
+                      {/* Rapport */}
+                      <Link
+                        href={`/dashboard/forms/${f.id}/report${lang ? `?lang=${lang}` : ""}`}
+                        className="inline-flex items-center justify-center w-9 h-9 rounded-xl border hover:bg-neutral-50"
+                        title={T.btn.report}
+                      >
+                        <BarChart3 className="w-4 h-4" />
+                      </Link>
 
-                    <IconButton
-                      title="Supprimer"
-                      danger
-                      onClick={() => onDelete(f.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </IconButton>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                      {/* Supprimer */}
+                      <button
+                        onClick={() => onDelete(f.id)}
+                        className="inline-flex items-center justify-center w-9 h-9 rounded-xl border border-red-200 text-red-600 hover:bg-red-50"
+                        title={T.btn.delete}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Exports */}
+                    <div className="mt-2 flex items-center gap-2">
+                      <a
+                        href={`/api/forms/${f.id}/export?lang=fr`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs inline-flex items-center rounded-lg border px-2.5 py-1 hover:bg-neutral-50"
+                      >
+                        {T.btn.exportFR}
+                      </a>
+                      <a
+                        href={`/api/forms/${f.id}/export?lang=en`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs inline-flex items-center rounded-lg border px-2.5 py-1 hover:bg-neutral-50"
+                      >
+                        {T.btn.exportEN}
+                      </a>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
 
             {forms.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-neutral-500">
-                  Aucun formulaire.
+              <tr className="border-t">
+                <td className="px-4 py-10 text-center text-neutral-500" colSpan={4}>
+                  {lang === "en"
+                    ? "No form yet. Create your first form!"
+                    : "Aucun formulaire pour le moment. Crée ton premier formulaire !"}
                 </td>
               </tr>
             )}
@@ -153,77 +318,4 @@ export default function DashboardClient({
       </div>
     </div>
   );
-}
-
-/* -------------------------- Petits composants UI -------------------------- */
-
-function StatCard({
-  title,
-  value,
-  icon,
-}: {
-  title: string;
-  value: number;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-neutral-100">
-          {icon}
-        </div>
-        <div>
-          <div className="text-neutral-600 text-sm">{title}</div>
-          <div className="text-2xl font-semibold">{value}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function IconButton(props: {
-  children: React.ReactNode;
-  title: string;
-  onClick?: () => void;
-  href?: string;
-  asLink?: boolean;
-  danger?: boolean;
-}) {
-  const base =
-    "inline-flex h-9 w-9 items-center justify-center rounded-xl border transition";
-  const normal = "border-neutral-200 bg-white hover:bg-neutral-50";
-  const red = "border-red-200 bg-red-50 text-red-600 hover:bg-red-100";
-
-  if (props.asLink && props.href) {
-    return (
-      <Link
-        href={props.href}
-        title={props.title}
-        className={`${base} ${props.danger ? red : normal}`}
-      >
-        {props.children}
-      </Link>
-    );
-  }
-  return (
-    <button
-      type="button"
-      title={props.title}
-      onClick={props.onClick}
-      className={`${base} ${props.danger ? red : normal}`}
-    >
-      {props.children}
-    </button>
-  );
-}
-
-/* Petites icônes emoji-like pour les cartes de stats */
-function DocumentIcon() {
-  return <span className="text-lg">🧾</span>;
-}
-function UserIcon() {
-  return <span className="text-lg">👤</span>;
-}
-function ChartIcon() {
-  return <span className="text-lg">📊</span>;
 }
