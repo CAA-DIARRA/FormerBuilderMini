@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 const prisma = new PrismaClient();
 
 export default async function DashboardPage() {
-  // 1) Stats
+  // 1) Stats en parallèle
   const [totalForms, totalResponses, activeForms] = await Promise.all([
     prisma.form.count(),
     prisma.response.count(),
@@ -23,14 +23,17 @@ export default async function DashboardPage() {
       title: true,
       slug: true,
       isOpen: true,
-      createdAt: true,
+      createdAt: true, // Date côté serveur
     },
   });
 
-  // ⚠️ Sérialiser les Date pour le Client Component
+  // 3) Sérialisation (toujours string ISO)
   const forms = formsRaw.map((f) => ({
-    ...f,
-    createdAt: f.createdAt ? f.createdAt.toISOString() : null,
+    id: f.id,
+    title: f.title ?? "Sans titre",
+    slug: f.slug,
+    isOpen: f.isOpen,
+    createdAt: f.createdAt.toISOString(), // <- string
   }));
 
   return (
