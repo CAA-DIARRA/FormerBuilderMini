@@ -1,27 +1,33 @@
 "use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Globe } from "lucide-react";
+import { useCallback } from "react";
 
-export default function LanguageToggle() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const current = searchParams.get("lang") === "en" ? "en" : "fr";
+export type Lang = "fr" | "en";
 
-  const toggle = () => {
-    const newLang = current === "fr" ? "en" : "fr";
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("lang", newLang);
-    router.push(`${pathname}?${params.toString()}`);
-  };
+type Props = {
+  value: Lang;
+  onChange: (next: Lang) => void;
+  className?: string;
+};
+
+export default function LanguageToggle({ value, onChange, className }: Props) {
+  const next = useCallback(() => onChange(value === "en" ? "fr" : "en"), [value, onChange]);
+  const label = value === "en" ? "English" : "Français";
 
   return (
     <button
-      onClick={toggle}
-      className="flex items-center gap-2 rounded-xl border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+      type="button"
+      onClick={next}
+      className={
+        "inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-sm hover:bg-neutral-50 " +
+        (className ?? "")
+      }
+      aria-label="Toggle language"
+      title="Toggle language"
     >
-      <span className="text-lg">🌐</span>
-      {current === "fr" ? "English" : "Français"}
+      <Globe className="w-4 h-4" />
+      <span>{label}</span>
     </button>
   );
 }
