@@ -6,10 +6,10 @@ import { useMemo } from "react";
 
 type FormRow = {
   id: string;
-  title: string | null;
+  title: string;
   slug: string;
   isOpen: boolean;
-  createdAt: string | null; // ISO string (vient du Server Component)
+  createdAt: string; // toujours string (ISO)
 };
 
 type Stats = {
@@ -38,7 +38,7 @@ export default function DashboardClient({
     const url = `${window.location.origin}/f/${f.slug}`;
     if (navigator.share) {
       try {
-        await navigator.share({ title: f.title ?? "Formulaire", url });
+        await navigator.share({ title: f.title, url });
         return;
       } catch {
         /* noop */
@@ -46,6 +46,14 @@ export default function DashboardClient({
     }
     await navigator.clipboard.writeText(url);
     alert("Lien copié dans le presse-papiers");
+  };
+
+  const fmtDate = (iso: string) => {
+    try {
+      return new Date(iso).toLocaleDateString();
+    } catch {
+      return "—";
+    }
   };
 
   return (
@@ -79,13 +87,9 @@ export default function DashboardClient({
 
             {forms.map((f) => (
               <tr key={f.id} className="border-t">
-                <td className="p-3">{f.title ?? "Sans titre"}</td>
+                <td className="p-3">{f.title}</td>
                 <td className="p-3">{f.slug}</td>
-                <td className="p-3">
-                  {f.createdAt
-                    ? new Date(f.createdAt).toLocaleDateString()
-                    : "—"}
-                </td>
+                <td className="p-3">{fmtDate(f.createdAt)}</td>
                 <td className="p-3">
                   <span className={f.isOpen ? "text-green-700" : "text-neutral-500"}>
                     {f.isOpen ? "Actif" : "Brouillon"}
@@ -108,16 +112,16 @@ export default function DashboardClient({
                       Partager
                     </button>
 
-                    {/* Bouton Rapport (page analytics) */}
+                    {/* Bouton Rapport (stats, données, charts & camembert) */}
                     <Link
                       href={`/forms/${f.id}/report?lang=fr`}
                       className="px-2 py-1 rounded border hover:bg-neutral-50"
-                      title="Voir statistiques, réponses agrégées et graphiques"
+                      title="Voir statistiques et graphiques"
                     >
                       Rapport
                     </Link>
 
-                    {/* (Optionnel) Exports Excel FR/EN */}
+                    {/* Exports Excel FR/EN */}
                     <a
                       href={`/api/forms/${f.id}/export?lang=fr`}
                       className="px-2 py-1 rounded border hover:bg-neutral-50"
