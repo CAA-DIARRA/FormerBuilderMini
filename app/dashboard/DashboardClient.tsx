@@ -1,29 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
-import {
-  Eye,
-  Share2,
-  QrCode,
-  BarChart3,
-  Trash2,
-} from "lucide-react";
-import LanguageToggle from "../components/LanguageToggle";
+import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import LanguageToggle, { type Lang } from "../components/LanguageToggle";
+import { Eye, Share2, QrCode, BarChart2, Trash2, Plus } from "lucide-react";
+
+type Stats = {
+  totalForms: number;
+  totalResponses: number;
+  activeForms: number;
+};
 
 export type FormRow = {
   id: string;
   title: string;
-  slug: string;
-  isOpen: boolean;
   createdAt: string | Date | null;
-};
-
-export type Stats = {
-  totalForms: number;
-  totalResponses: number;
-  activeForms: number;
+  isOpen: boolean;
+  slug: string;
 };
 
 type Props = {
@@ -31,285 +25,232 @@ type Props = {
   stats: Stats;
 };
 
-const pill = (txt: string, variant: "active" | "draft" = "active") =>
-  variant === "active" ? (
-    <span className="inline-flex items-center px-2 py-0.5 text-xs rounded-full bg-black text-white">
-      {txt}
-    </span>
-  ) : (
-    <span className="inline-flex items-center px-2 py-0.5 text-xs rounded-full bg-neutral-200 text-neutral-700">
-      {txt}
-    </span>
-  );
-
 export default function DashboardClient({ forms, stats }: Props) {
-  const searchParams = useSearchParams();
-  const lang = searchParams.get("lang") === "en" ? "en" : "fr";
+  const router = useRouter();
+  const pathname = usePathname();
+  const sp = useSearchParams();
 
-  /* ---------- i18n ---------- */
+  const initialLang = (sp.get("lang") === "en" ? "en" : "fr") as Lang;
+  const [lang, setLang] = useState<Lang>(initialLang);
+
+  useEffect(() => {
+    const current = sp.get("lang") === "en" ? "en" : "fr";
+    if (current !== lang) {
+      const next = new URLSearchParams(sp);
+      next.set("lang", lang);
+      router.replace(`${pathname}?${next.toString()}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang]);
+
+  useEffect(() => {
+    const current = (sp.get("lang") === "en" ? "en" : "fr") as Lang;
+    if (current !== lang) setLang(current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sp]);
+
   const T = useMemo(() => {
     if (lang === "en") {
       return {
         title: "Dashboard",
-        cards: {
-          totalForms: "Total forms",
-          totalResponses: "Total responses",
-          activeForms: "Active forms",
-        },
-        table: {
-          thIndex: "#",
-          thTitle: "Dashboard",
-          thCreated: "Created on",
-          thActions: "Actions",
-        },
-        statusActive: "Active",
-        statusDraft: "Draft",
-        btn: {
-          newForm: "New form",
-          open: "Open",
-          share: "Share",
-          qr: "QR",
-          report: "Report",
-          delete: "Delete",
-          exportFR: "Export FR",
-          exportEN: "Export EN",
-        },
-        confirmDelete: "Delete this form and its responses?",
-        sharedCopied: "Public link copied!",
+        stat1: "Total forms",
+        stat2: "Total responses",
+        stat3: "Active forms",
+        colIdx: "#",
+        colTitle: "Dashboard",
+        colCreated: "Created",
+        colActions: "Actions",
+        badgeActive: "Active",
+        badgeDraft: "Draft",
+        open: "Open",
+        share: "Share",
+        qr: "QR",
+        report: "Report",
+        del: "Delete",
+        newForm: "New form",
+        exportFr: "Export FR",
+        exportEn: "Export EN",
       };
     }
     return {
       title: "Tableau de bord",
-      cards: {
-        totalForms: "Total formulaires",
-        totalResponses: "Total réponses",
-        activeForms: "Formulaires actifs",
-      },
-      table: {
-        thIndex: "#",
-        thTitle: "Tableau de bord",
-        thCreated: "Créé le",
-        thActions: "Actions",
-      },
-      statusActive: "Actif",
-      statusDraft: "Brouillon",
-      btn: {
-        newForm: "Nouveau formulaire",
-        open: "Ouvrir",
-        share: "Partager",
-        qr: "QR",
-        report: "Rapport",
-        delete: "Supprimer",
-        exportFR: "Export FR",
-        exportEN: "Export EN",
-      },
-      confirmDelete: "Supprimer ce formulaire et ses réponses ?",
-      sharedCopied: "Lien public copié !",
+      stat1: "Total formulaires",
+      stat2: "Total réponses",
+      stat3: "Formulaires actifs",
+      colIdx: "#",
+      colTitle: "Tableau de bord",
+      colCreated: "Créé le",
+      colActions: "Actions",
+      badgeActive: "Actif",
+      badgeDraft: "Brouillon",
+      open: "Ouvrir",
+      share: "Partager",
+      qr: "QR",
+      report: "Rapport",
+      del: "Supprimer",
+      newForm: "Nouveau formulaire",
+      exportFr: "Export FR",
+      exportEn: "Export EN",
     };
   }, [lang]);
 
-  const baseUrl =
-    process.env.NEXT_PUBLIC_BASE_URL ||
-    (typeof window !== "undefined" ? window.location.origin : "");
+  const delForm = async (id: string) => {
+    const ok =
+      lang === "en"
+        ? window.confirm("Delete this form and its responses?")
+        : window.confirm("Supprimer ce formulaire et ses réponses ?");
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/forms/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("delete_failed");
+      router.refresh();
+    } catch {
+      alert(lang === "en" ? "Deletion failed" : "La suppression a échoué");
+    }
+  };
 
   const fmtDate = (d: string | Date | null) => {
     if (!d) return "";
     const date = typeof d === "string" ? new Date(d) : d;
-    return date.toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "numeric",
-      day: "numeric",
-    });
-  };
-
-  const copy = async (txt: string) => {
     try {
-      await navigator.clipboard.writeText(txt);
-      // feedback simple
-      alert(T.sharedCopied);
+      return date.toLocaleDateString();
     } catch {
-      // fallback
-      prompt("Copy this link", txt);
+      return String(d);
     }
   };
-
-  const openQR = (url: string) => {
-    const qr = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
-      url
-    )}`;
-    window.open(qr, "_blank");
-  };
-
-  const onDelete = useCallback(async (id: string) => {
-    if (!confirm(T.confirmDelete)) return;
-    const res = await fetch(`/api/forms/${id}`, { method: "DELETE" });
-    if (res.ok) {
-      location.reload();
-    } else {
-      alert("Delete failed");
-    }
-  }, [T.confirmDelete]);
 
   return (
-    <div className="mx-auto max-w-7xl p-6 space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="max-w-6xl mx-auto p-6 space-y-6">
+      <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">{T.title}</h1>
         <div className="flex items-center gap-3">
-          <LanguageToggle />
+          {/* ✅ Correction: on passe bien les props nécessaires */}
+          <LanguageToggle value={lang} onChange={setLang} />
           <Link
             href={`/forms/new${lang ? `?lang=${lang}` : ""}`}
             className="inline-flex items-center rounded-xl bg-black px-4 py-2 text-white hover:bg-neutral-800 transition"
           >
-            + {T.btn.newForm}
+            <Plus className="w-4 h-4 mr-2" />
+            {T.newForm}
           </Link>
         </div>
       </div>
 
-      {/* Stat cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="rounded-2xl border p-5 bg-white">
-          <div className="text-sm text-neutral-500">{T.cards.totalForms}</div>
+        <div className="rounded-2xl border p-4 bg-white">
+          <div className="text-sm text-neutral-500">{T.stat1}</div>
           <div className="text-3xl font-semibold mt-1">{stats.totalForms}</div>
         </div>
-        <div className="rounded-2xl border p-5 bg-white">
-          <div className="text-sm text-neutral-500">{T.cards.totalResponses}</div>
+        <div className="rounded-2xl border p-4 bg-white">
+          <div className="text-sm text-neutral-500">{T.stat2}</div>
           <div className="text-3xl font-semibold mt-1">{stats.totalResponses}</div>
         </div>
-        <div className="rounded-2xl border p-5 bg-white">
-          <div className="text-sm text-neutral-500">{T.cards.activeForms}</div>
+        <div className="rounded-2xl border p-4 bg-white">
+          <div className="text-sm text-neutral-500">{T.stat3}</div>
           <div className="text-3xl font-semibold mt-1">{stats.activeForms}</div>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="overflow-hidden rounded-2xl border bg-white">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-neutral-50 text-left">
-              <th className="px-4 py-3 w-14">{T.table.thIndex}</th>
-              <th className="px-4 py-3">{T.table.thTitle}</th>
-              <th className="px-4 py-3 w-40">{T.table.thCreated}</th>
-              <th className="px-4 py-3 w-64">{T.table.thActions}</th>
+      <div className="rounded-2xl border overflow-hidden bg-white">
+        <table className="w-full text-sm">
+          <thead className="bg-neutral-50">
+            <tr>
+              <th className="text-left px-4 py-3 w-10">{T.colIdx}</th>
+              <th className="text-left px-4 py-3">{T.colTitle}</th>
+              <th className="text-left px-4 py-3">{T.colCreated}</th>
+              <th className="text-left px-4 py-3">{T.colActions}</th>
             </tr>
           </thead>
           <tbody>
-            {forms.map((f, i) => {
-              const publicUrl = `${baseUrl}/f/${f.slug}${
-                lang ? `?lang=${lang}` : ""
-              }`;
+            {forms.map((f, i) => (
+              <tr key={f.id} className="border-t">
+                <td className="px-4 py-4 align-top">{i + 1}</td>
+                <td className="px-4 py-4 align-top">
+                  <div className="font-medium">{f.title}</div>
+                  <div className="mt-2 h-3 rounded-full bg-neutral-200 overflow-hidden max-w-[560px]">
+                    <div
+                      className={`h-full ${f.isOpen ? "bg-black" : "bg-neutral-300"}`}
+                      style={{ width: "100%" }}
+                    />
+                  </div>
+                  <div className="mt-2">
+                    <span
+                      className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full ${
+                        f.isOpen
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-neutral-100 text-neutral-600"
+                      }`}
+                    >
+                      {f.isOpen ? T.badgeActive : T.badgeDraft}
+                    </span>
+                  </div>
+                </td>
+                <td className="px-4 py-4 align-top">{fmtDate(f.createdAt)}</td>
+                <td className="px-4 py-4 align-top">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      className="inline-flex items-center justify-center rounded-lg border px-2.5 py-1.5 hover:bg-neutral-50"
+                      href={`/forms/${f.id}${lang ? `?lang=${lang}` : ""}`}
+                      title={T.open}
+                    >
+                      <Eye className="w-4 h-4" />
+                    </Link>
 
-              return (
-                <tr key={f.id} className="border-t">
-                  {/* # */}
-                  <td className="px-4 py-4 align-top text-sm text-neutral-500">
-                    {i + 1}
-                  </td>
+                    <Link
+                      className="inline-flex items-center justify-center rounded-lg border px-2.5 py-1.5 hover:bg-neutral-50"
+                      href={`/f/${f.slug}${lang ? `?lang=${lang}` : ""}`}
+                      title={T.share}
+                    >
+                      <Share2 className="w-4 h-4" />
+                    </Link>
 
-                  {/* Title + status + progress bar-like */}
-                  <td className="px-4 py-4 align-top">
-                    <div className="font-semibold">{f.title}</div>
-                    <div className="mt-2 flex items-center gap-2">
-                      {f.isOpen
-                        ? pill(T.statusActive, "active")
-                        : pill(T.statusDraft, "draft")}
-                      <div className="flex-1 h-3 bg-neutral-200 rounded-full overflow-hidden">
-                        {/* simple “progress” look only */}
-                        <div
-                          className={`h-full rounded-full ${
-                            f.isOpen ? "bg-black" : "bg-neutral-300"
-                          }`}
-                          style={{ width: f.isOpen ? "85%" : "40%" }}
-                        />
-                      </div>
-                    </div>
-                  </td>
+                    <Link
+                      className="inline-flex items-center justify-center rounded-lg border px-2.5 py-1.5 hover:bg-neutral-50"
+                      href={`/f/${f.slug}${lang ? `?lang=${lang}` : ""}`}
+                      title={T.qr}
+                    >
+                      <QrCode className="w-4 h-4" />
+                    </Link>
 
-                  {/* Created */}
-                  <td className="px-4 py-4 align-top whitespace-nowrap">
-                    {fmtDate(f.createdAt)}
-                  </td>
+                    <Link
+                      className="inline-flex items-center justify-center rounded-lg border px-2.5 py-1.5 hover:bg-neutral-50"
+                      href={`/dashboard/forms/${f.id}/report${lang ? `?lang=${lang}` : ""}`}
+                      title={T.report}
+                    >
+                      <BarChart2 className="w-4 h-4" />
+                    </Link>
 
-                  {/* Actions */}
-                  <td className="px-4 py-4 align-top">
-                    <div className="flex items-center gap-2">
-                      {/* Ouvrir */}
-                      <Link
-                        href={`/f/${f.slug}${lang ? `?lang=${lang}` : ""}`}
-                        target="_blank"
-                        className="inline-flex items-center justify-center w-9 h-9 rounded-xl border hover:bg-neutral-50"
-                        title={T.btn.open}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Link>
+                    <button
+                      type="button"
+                      onClick={() => delForm(f.id)}
+                      className="inline-flex items-center justify-center rounded-lg border px-2.5 py-1.5 hover:bg-red-50 text-red-600 border-red-200"
+                      title={T.del}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
 
-                      {/* Partager */}
-                      <button
-                        onClick={() => copy(publicUrl)}
-                        className="inline-flex items-center justify-center w-9 h-9 rounded-xl border hover:bg-neutral-50"
-                        title={T.btn.share}
-                      >
-                        <Share2 className="w-4 h-4" />
-                      </button>
-
-                      {/* QR Code */}
-                      <button
-                        onClick={() => openQR(publicUrl)}
-                        className="inline-flex items-center justify-center w-9 h-9 rounded-xl border hover:bg-neutral-50"
-                        title={T.btn.qr}
-                      >
-                        <QrCode className="w-4 h-4" />
-                      </button>
-
-                      {/* Rapport */}
-                      <Link
-                        href={`/dashboard/forms/${f.id}/report${lang ? `?lang=${lang}` : ""}`}
-                        className="inline-flex items-center justify-center w-9 h-9 rounded-xl border hover:bg-neutral-50"
-                        title={T.btn.report}
-                      >
-                        <BarChart3 className="w-4 h-4" />
-                      </Link>
-
-                      {/* Supprimer */}
-                      <button
-                        onClick={() => onDelete(f.id)}
-                        className="inline-flex items-center justify-center w-9 h-9 rounded-xl border border-red-200 text-red-600 hover:bg-red-50"
-                        title={T.btn.delete}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    {/* Exports */}
-                    <div className="mt-2 flex items-center gap-2">
-                      <a
-                        href={`/api/forms/${f.id}/export?lang=fr`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs inline-flex items-center rounded-lg border px-2.5 py-1 hover:bg-neutral-50"
-                      >
-                        {T.btn.exportFR}
-                      </a>
-                      <a
-                        href={`/api/forms/${f.id}/export?lang=en`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs inline-flex items-center rounded-lg border px-2.5 py-1 hover:bg-neutral-50"
-                      >
-                        {T.btn.exportEN}
-                      </a>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-
+                  <div className="flex gap-2 mt-2">
+                    <a
+                      className="text-xs underline text-neutral-600 hover:text-black"
+                      href={`/api/forms/${f.id}/export?lang=fr`}
+                    >
+                      {T.exportFr}
+                    </a>
+                    <a
+                      className="text-xs underline text-neutral-600 hover:text-black"
+                      href={`/api/forms/${f.id}/export?lang=en`}
+                    >
+                      {T.exportEn}
+                    </a>
+                  </div>
+                </td>
+              </tr>
+            ))}
             {forms.length === 0 && (
-              <tr className="border-t">
-                <td className="px-4 py-10 text-center text-neutral-500" colSpan={4}>
-                  {lang === "en"
-                    ? "No form yet. Create your first form!"
-                    : "Aucun formulaire pour le moment. Crée ton premier formulaire !"}
+              <tr>
+                <td colSpan={4} className="px-4 py-10 text-center text-neutral-500">
+                  {lang === "en" ? "No forms yet." : "Aucun formulaire pour le moment."}
                 </td>
               </tr>
             )}
