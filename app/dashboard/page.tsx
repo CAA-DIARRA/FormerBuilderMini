@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import DashboardClient, { type FormRow, type Stats } from "./DashboardClient";
+import DashboardClient from "./DashboardClient";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -7,21 +7,15 @@ export const runtime = "nodejs";
 const prisma = new PrismaClient();
 
 export default async function DashboardPage() {
-  // KPIs
+  // --- Récupération des statistiques globales
   const [totalForms, totalResponses, activeForms] = await Promise.all([
     prisma.form.count(),
     prisma.response.count(),
     prisma.form.count({ where: { isOpen: true } }),
   ]);
 
-  const stats: Stats = {
-    totalForms,
-    totalResponses,
-    activeForms,
-  };
-
-  // Liste des formulaires
-  const formsDb = await prisma.form.findMany({
+  // --- Liste simple des formulaires pour affichage dans le tableau
+  const formsRaw = await prisma.form.findMany({
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
@@ -32,14 +26,17 @@ export default async function DashboardPage() {
     },
   });
 
-  // On force createdAt en string pour éviter les soucis de sérialisation
-  const forms: FormRow[] = formsDb.map((f) => ({
-    id: f.id,
-    title: f.title,
-    slug: f.slug,
-    isOpen: f.isOpen,
-    createdAt: f.createdAt ? f.createdAt.toISOString() : "",
+  // --- Conversion sécurisée pour éviter les erreurs de sérialisation côté client
+  const forms = formsRaw.map((f) => ({
+    ...f,
+    createdAt: f.createdAt ? f.createdAt.toISOString() : null,
   }));
 
-  return <DashboardClient forms={forms} stats={stats} />;
+  // --- Rendu côté client
+  return (
+    <DashboardClient
+      forms={forms}
+      stats={{ totalForms, totalResponses, activeForms }}
+    />
+  );
 }
