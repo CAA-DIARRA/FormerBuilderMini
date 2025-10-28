@@ -1,23 +1,22 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import LanguageToggle, { type Lang } from "../components/LanguageToggle";
-import { Eye, Share2, QrCode, BarChart2, Trash2, Plus } from "lucide-react";
 
-type Stats = {
-  totalForms: number;
-  totalResponses: number;
-  activeForms: number;
-};
-
+/** Types exportés pour que page.tsx puisse les importer */
 export type FormRow = {
   id: string;
   title: string;
-  createdAt: string | Date | null;
-  isOpen: boolean;
   slug: string;
+  isOpen: boolean;
+  createdAt: string | Date; // on accepte Date côté serveur et string côté sérialisation
+};
+
+export type Stats = {
+  totalForms: number;
+  totalResponses: number;
+  activeForms: number;
 };
 
 type Props = {
@@ -25,238 +24,200 @@ type Props = {
   stats: Stats;
 };
 
+const FR = {
+  title: "Tableau de bord",
+  kpis: {
+    totalForms: "Formulaires",
+    totalResponses: "Réponses",
+    activeForms: "Formulaires actifs",
+  },
+  actions: {
+    newForm: "Nouveau formulaire",
+  },
+  table: {
+    title: "Formations",
+    cols: {
+      title: "Titre",
+      status: "Statut",
+      createdAt: "Créé le",
+      actions: "Actions",
+    },
+    open: "Ouvert",
+    closed: "Fermé",
+    view: "Ouvrir",
+    report: "Rapport",
+    export: "Exporter",
+  },
+};
+
+const EN = {
+  title: "Dashboard",
+  kpis: {
+    totalForms: "Forms",
+    totalResponses: "Responses",
+    activeForms: "Active forms",
+  },
+  actions: {
+    newForm: "New form",
+  },
+  table: {
+    title: "Trainings",
+    cols: {
+      title: "Title",
+      status: "Status",
+      createdAt: "Created at",
+      actions: "Actions",
+    },
+    open: "Open",
+    closed: "Closed",
+    view: "Open",
+    report: "Report",
+    export: "Export",
+  },
+};
+
 export default function DashboardClient({ forms, stats }: Props) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const sp = useSearchParams();
-
-  const initialLang = (sp.get("lang") === "en" ? "en" : "fr") as Lang;
-  const [lang, setLang] = useState<Lang>(initialLang);
-
-  useEffect(() => {
-    const current = sp.get("lang") === "en" ? "en" : "fr";
-    if (current !== lang) {
-      const next = new URLSearchParams(sp);
-      next.set("lang", lang);
-      router.replace(`${pathname}?${next.toString()}`);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lang]);
-
-  useEffect(() => {
-    const current = (sp.get("lang") === "en" ? "en" : "fr") as Lang;
-    if (current !== lang) setLang(current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sp]);
-
-  const T = useMemo(() => {
-    if (lang === "en") {
-      return {
-        title: "Dashboard",
-        stat1: "Total forms",
-        stat2: "Total responses",
-        stat3: "Active forms",
-        colIdx: "#",
-        colTitle: "Dashboard",
-        colCreated: "Created",
-        colActions: "Actions",
-        badgeActive: "Active",
-        badgeDraft: "Draft",
-        open: "Open",
-        share: "Share",
-        qr: "QR",
-        report: "Report",
-        del: "Delete",
-        newForm: "New form",
-        exportFr: "Export FR",
-        exportEn: "Export EN",
-      };
-    }
-    return {
-      title: "Tableau de bord",
-      stat1: "Total formulaires",
-      stat2: "Total réponses",
-      stat3: "Formulaires actifs",
-      colIdx: "#",
-      colTitle: "Tableau de bord",
-      colCreated: "Créé le",
-      colActions: "Actions",
-      badgeActive: "Actif",
-      badgeDraft: "Brouillon",
-      open: "Ouvrir",
-      share: "Partager",
-      qr: "QR",
-      report: "Rapport",
-      del: "Supprimer",
-      newForm: "Nouveau formulaire",
-      exportFr: "Export FR",
-      exportEn: "Export EN",
-    };
-  }, [lang]);
-
-  const delForm = async (id: string) => {
-    const ok =
-      lang === "en"
-        ? window.confirm("Delete this form and its responses?")
-        : window.confirm("Supprimer ce formulaire et ses réponses ?");
-    if (!ok) return;
-    try {
-      const res = await fetch(`/api/forms/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("delete_failed");
-      router.refresh();
-    } catch {
-      alert(lang === "en" ? "Deletion failed" : "La suppression a échoué");
-    }
-  };
-
-  const fmtDate = (d: string | Date | null) => {
-    if (!d) return "";
-    const date = typeof d === "string" ? new Date(d) : d;
-    try {
-      return date.toLocaleDateString();
-    } catch {
-      return String(d);
-    }
-  };
+  const [lang, setLang] = useState<Lang>("fr");
+  const T = useMemo(() => (lang === "fr" ? FR : EN), [lang]);
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
+    <div className="mx-auto max-w-6xl p-6 space-y-8">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">{T.title}</h1>
         <div className="flex items-center gap-3">
-          {/* ✅ Correction: on passe bien les props nécessaires */}
+          {/* ⚠️ IMPORTANT : on passe bien value / onChange */}
           <LanguageToggle value={lang} onChange={setLang} />
           <Link
             href={`/forms/new${lang ? `?lang=${lang}` : ""}`}
             className="inline-flex items-center rounded-xl bg-black px-4 py-2 text-white hover:bg-neutral-800 transition"
           >
-            <Plus className="w-4 h-4 mr-2" />
-            {T.newForm}
+            {T.actions.newForm}
           </Link>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="rounded-2xl border p-4 bg-white">
-          <div className="text-sm text-neutral-500">{T.stat1}</div>
-          <div className="text-3xl font-semibold mt-1">{stats.totalForms}</div>
-        </div>
-        <div className="rounded-2xl border p-4 bg-white">
-          <div className="text-sm text-neutral-500">{T.stat2}</div>
-          <div className="text-3xl font-semibold mt-1">{stats.totalResponses}</div>
-        </div>
-        <div className="rounded-2xl border p-4 bg-white">
-          <div className="text-sm text-neutral-500">{T.stat3}</div>
-          <div className="text-3xl font-semibold mt-1">{stats.activeForms}</div>
-        </div>
+      {/* KPIs */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <KpiCard label={T.kpis.totalForms} value={stats.totalForms} />
+        <KpiCard label={T.kpis.totalResponses} value={stats.totalResponses} />
+        <KpiCard label={T.kpis.activeForms} value={stats.activeForms} />
       </div>
 
-      <div className="rounded-2xl border overflow-hidden bg-white">
-        <table className="w-full text-sm">
-          <thead className="bg-neutral-50">
-            <tr>
-              <th className="text-left px-4 py-3 w-10">{T.colIdx}</th>
-              <th className="text-left px-4 py-3">{T.colTitle}</th>
-              <th className="text-left px-4 py-3">{T.colCreated}</th>
-              <th className="text-left px-4 py-3">{T.colActions}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {forms.map((f, i) => (
-              <tr key={f.id} className="border-t">
-                <td className="px-4 py-4 align-top">{i + 1}</td>
-                <td className="px-4 py-4 align-top">
-                  <div className="font-medium">{f.title}</div>
-                  <div className="mt-2 h-3 rounded-full bg-neutral-200 overflow-hidden max-w-[560px]">
-                    <div
-                      className={`h-full ${f.isOpen ? "bg-black" : "bg-neutral-300"}`}
-                      style={{ width: "100%" }}
-                    />
-                  </div>
-                  <div className="mt-2">
+      {/* Table */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">{T.table.title}</h2>
+
+        <div className="overflow-x-auto rounded-2xl border">
+          <table className="min-w-full text-sm">
+            <thead className="bg-neutral-50">
+              <tr className="text-left">
+                <Th>{T.table.cols.title}</Th>
+                <Th>{T.table.cols.status}</Th>
+                <Th>{T.table.cols.createdAt}</Th>
+                <Th className="text-right">{T.table.cols.actions}</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {forms.map((f) => (
+                <tr key={f.id} className="border-t">
+                  <Td className="font-medium">{f.title}</Td>
+                  <Td>
                     <span
-                      className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full ${
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${
                         f.isOpen
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-neutral-100 text-neutral-600"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-neutral-100 text-neutral-700"
                       }`}
                     >
-                      {f.isOpen ? T.badgeActive : T.badgeDraft}
+                      {f.isOpen ? T.table.open : T.table.closed}
                     </span>
-                  </div>
-                </td>
-                <td className="px-4 py-4 align-top">{fmtDate(f.createdAt)}</td>
-                <td className="px-4 py-4 align-top">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Link
-                      className="inline-flex items-center justify-center rounded-lg border px-2.5 py-1.5 hover:bg-neutral-50"
-                      href={`/forms/${f.id}${lang ? `?lang=${lang}` : ""}`}
-                      title={T.open}
-                    >
-                      <Eye className="w-4 h-4" />
-                    </Link>
+                  </Td>
+                  <Td>
+                    {f.createdAt
+                      ? new Date(f.createdAt).toLocaleDateString()
+                      : ""}
+                  </Td>
+                  <Td className="text-right">
+                    <div className="flex justify-end gap-2">
+                      {/* Lien public du formulaire */}
+                      <Link
+                        href={`/f/${f.slug}?lang=${lang}`}
+                        className="rounded-xl border px-3 py-1 hover:bg-neutral-50"
+                      >
+                        {T.table.view}
+                      </Link>
 
-                    <Link
-                      className="inline-flex items-center justify-center rounded-lg border px-2.5 py-1.5 hover:bg-neutral-50"
-                      href={`/f/${f.slug}${lang ? `?lang=${lang}` : ""}`}
-                      title={T.share}
-                    >
-                      <Share2 className="w-4 h-4" />
-                    </Link>
+                      {/* Bouton Rapport (page analytique) */}
+                      <Link
+                        href={`/dashboard/forms/${f.id}/report?lang=${lang}`}
+                        className="rounded-xl border px-3 py-1 hover:bg-neutral-50"
+                      >
+                        {T.table.report}
+                      </Link>
 
-                    <Link
-                      className="inline-flex items-center justify-center rounded-lg border px-2.5 py-1.5 hover:bg-neutral-50"
-                      href={`/f/${f.slug}${lang ? `?lang=${lang}` : ""}`}
-                      title={T.qr}
-                    >
-                      <QrCode className="w-4 h-4" />
-                    </Link>
+                      {/* Export Excel (endpoint d’export) */}
+                      <a
+                        href={`/api/forms/${f.id}/export?lang=${lang}`}
+                        className="rounded-xl border px-3 py-1 hover:bg-neutral-50"
+                      >
+                        {T.table.export}
+                      </a>
+                    </div>
+                  </Td>
+                </tr>
+              ))}
 
-                    <Link
-                      className="inline-flex items-center justify-center rounded-lg border px-2.5 py-1.5 hover:bg-neutral-50"
-                      href={`/dashboard/forms/${f.id}/report${lang ? `?lang=${lang}` : ""}`}
-                      title={T.report}
-                    >
-                      <BarChart2 className="w-4 h-4" />
-                    </Link>
-
-                    <button
-                      type="button"
-                      onClick={() => delForm(f.id)}
-                      className="inline-flex items-center justify-center rounded-lg border px-2.5 py-1.5 hover:bg-red-50 text-red-600 border-red-200"
-                      title={T.del}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <div className="flex gap-2 mt-2">
-                    <a
-                      className="text-xs underline text-neutral-600 hover:text-black"
-                      href={`/api/forms/${f.id}/export?lang=fr`}
-                    >
-                      {T.exportFr}
-                    </a>
-                    <a
-                      className="text-xs underline text-neutral-600 hover:text-black"
-                      href={`/api/forms/${f.id}/export?lang=en`}
-                    >
-                      {T.exportEn}
-                    </a>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {forms.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-neutral-500">
-                  {lang === "en" ? "No forms yet." : "Aucun formulaire pour le moment."}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+              {forms.length === 0 && (
+                <tr>
+                  <Td colSpan={4} className="text-center text-neutral-500 py-8">
+                    —
+                  </Td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
+  );
+}
+
+function KpiCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl border p-4 bg-white">
+      <div className="text-sm text-neutral-500">{label}</div>
+      <div className="text-2xl font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function Th({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <th className={`px-4 py-3 text-xs font-semibold uppercase ${className}`}>
+      {children}
+    </th>
+  );
+}
+
+function Td({
+  children,
+  className = "",
+  colSpan,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  colSpan?: number;
+}) {
+  return (
+    <td className={`px-4 py-3 align-middle ${className}`} colSpan={colSpan}>
+      {children}
+    </td>
   );
 }
