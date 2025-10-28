@@ -7,29 +7,39 @@ export const runtime = "nodejs";
 const prisma = new PrismaClient();
 
 export default async function DashboardPage() {
-  // Stats haut de page
+  // KPIs
   const [totalForms, totalResponses, activeForms] = await Promise.all([
     prisma.form.count(),
     prisma.response.count(),
     prisma.form.count({ where: { isOpen: true } }),
   ]);
 
-  // Données des formulaires
-  const rows = await prisma.form.findMany({
+  const stats: Stats = {
+    totalForms,
+    totalResponses,
+    activeForms,
+  };
+
+  // Liste des formulaires
+  const formsDb = await prisma.form.findMany({
     orderBy: { createdAt: "desc" },
-    select: { id: true, title: true, slug: true, isOpen: true, createdAt: true },
+    select: {
+      id: true,
+      title: true,
+      createdAt: true,
+      isOpen: true,
+      slug: true,
+    },
   });
 
-  // Normalisation stricte pour le composant client
-  const forms: FormRow[] = rows.map((f) => ({
+  // On force createdAt en string pour éviter les soucis de sérialisation
+  const forms: FormRow[] = formsDb.map((f) => ({
     id: f.id,
     title: f.title,
     slug: f.slug,
     isOpen: f.isOpen,
-    createdAt: f.createdAt ? f.createdAt.toISOString() : new Date().toISOString(),
+    createdAt: f.createdAt ? f.createdAt.toISOString() : "",
   }));
-
-  const stats: Stats = { totalForms, totalResponses, activeForms };
 
   return <DashboardClient forms={forms} stats={stats} />;
 }
