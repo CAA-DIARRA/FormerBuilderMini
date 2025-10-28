@@ -67,31 +67,14 @@ function LanguageToggle({
 const TEXTS = {
   fr: {
     title: "Tableau de bord",
-    cards: {
-      forms: "Formulaires",
-      responses: "Réponses",
-      active: "Actifs",
-    },
+    cards: { forms: "Formulaires", responses: "Réponses", active: "Actifs" },
     table: {
       title: "Formations",
-      th: {
-        name: "Intitulé",
-        slug: "Slug",
-        created: "Créé le",
-        status: "Statut",
-        actions: "Actions",
-      },
+      th: { name: "Intitulé", slug: "Slug", created: "Créé le", status: "Statut", actions: "Actions" },
       open: "Ouvert",
       closed: "Fermé",
     },
-    actions: {
-      view: "Ouvrir",
-      qr: "QR",
-      link: "Lien",
-      export: "Exporter",
-      delete: "Supprimer",
-      report: "Rapport",
-    },
+    actions: { view: "Ouvrir", qr: "QR", link: "Lien", export: "Exporter", delete: "Supprimer", report: "Rapport" },
     menus: {
       fr: "Français",
       en: "Anglais",
@@ -102,35 +85,22 @@ const TEXTS = {
       confirmDelete: "Supprimer cette formation ?",
       deleted: "Formation supprimée.",
       copied: "Copié !",
+      urlFr: "Lien (FR)",
+      urlEn: "Lien (EN)",
+      xlsxFr: "Export Excel (FR)",
+      xlsxEn: "Export Excel (EN)",
     },
   },
   en: {
     title: "Dashboard",
-    cards: {
-      forms: "Forms",
-      responses: "Responses",
-      active: "Active",
-    },
+    cards: { forms: "Forms", responses: "Responses", active: "Active" },
     table: {
       title: "Trainings",
-      th: {
-        name: "Title",
-        slug: "Slug",
-        created: "Created at",
-        status: "Status",
-        actions: "Actions",
-      },
+      th: { name: "Title", slug: "Slug", created: "Created at", status: "Status", actions: "Actions" },
       open: "Open",
       closed: "Closed",
     },
-    actions: {
-      view: "Open",
-      qr: "QR",
-      link: "Link",
-      export: "Export",
-      delete: "Delete",
-      report: "Report",
-    },
+    actions: { view: "Open", qr: "QR", link: "Link", export: "Export", delete: "Delete", report: "Report" },
     menus: {
       fr: "French",
       en: "English",
@@ -141,6 +111,10 @@ const TEXTS = {
       confirmDelete: "Delete this training?",
       deleted: "Training deleted.",
       copied: "Copied!",
+      urlFr: "Public link (FR)",
+      urlEn: "Public link (EN)",
+      xlsxFr: "Excel export (FR)",
+      xlsxEn: "Excel export (EN)",
     },
   },
 } as const;
@@ -158,7 +132,6 @@ function frDate(iso: string | null) {
 }
 
 function urlPublic(slug: string, lang: "fr" | "en") {
-  // On s'appuie sur NEXT_PUBLIC_BASE_URL si présent, sinon URL relative (Render gère).
   const base = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/+$/, "") || "";
   return `${base}/f/${slug}?lang=${lang}`;
 }
@@ -169,7 +142,6 @@ function urlExport(formId: string, lang: "fr" | "en") {
 }
 
 function qrSrc(link: string, size = 220) {
-  // Pas de nouvelle dépendance : on utilise un service d'image QR public
   const safe = encodeURIComponent(link);
   return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${safe}`;
 }
@@ -190,10 +162,15 @@ export default function DashboardClient({ forms, stats }: Props) {
   const [uiLang, setUiLang] = useState<"fr" | "en">("fr");
   const T = useMemo(() => TEXTS[uiLang], [uiLang]);
 
-  // états des menus / modals par formulaire
-  const [openMenu, setOpenMenu] = useState<string | null>(null); // pour menus (Lien/Exporter)
-  const [qrFor, setQrFor] = useState<string | null>(null); // id du form pour le modal QR
-  const [qrTab, setQrTab] = useState<"fr" | "en">("fr"); // onglet courant du modal QR
+  // États des modales par action
+  const [qrFor, setQrFor] = useState<string | null>(null);
+  const [qrTab, setQrTab] = useState<"fr" | "en">("fr");
+
+  const [linkFor, setLinkFor] = useState<string | null>(null);
+  const [linkTab, setLinkTab] = useState<"fr" | "en">("fr");
+
+  const [exportFor, setExportFor] = useState<string | null>(null);
+  const [exportTab, setExportTab] = useState<"fr" | "en">("fr");
 
   // suppression (optimiste)
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -205,7 +182,6 @@ export default function DashboardClient({ forms, stats }: Props) {
       const res = await fetch(`/api/forms/${form.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("delete_failed");
       alert(T.menus.deleted);
-      // rafraîchit la page après suppression
       location.reload();
     } catch {
       alert("Error");
@@ -266,7 +242,6 @@ export default function DashboardClient({ forms, stats }: Props) {
                 const enLink = urlPublic(f.slug, "en");
                 const frXls = urlExport(f.id, "fr");
                 const enXls = urlExport(f.id, "en");
-                const isMenuOpen = openMenu === f.id;
 
                 return (
                   <tr key={f.id} className="border-t">
@@ -284,7 +259,7 @@ export default function DashboardClient({ forms, stats }: Props) {
                     </td>
                     <td className="px-4 py-2">
                       <div className="flex items-center justify-end gap-2">
-                        {/* Ouvrir (vue publique, par défaut dans la langue du toggle UI) */}
+                        {/* Ouvrir (vue publique, langue = uiLang) */}
                         <Link
                           href={urlPublic(f.slug, uiLang)}
                           target="_blank"
@@ -294,7 +269,7 @@ export default function DashboardClient({ forms, stats }: Props) {
                           {T.actions.view}
                         </Link>
 
-                        {/* Rapport (page interne si tu l'as déjà) */}
+                        {/* Rapport (si page existante) */}
                         <Link
                           href={`/forms/${f.id}/report`}
                           className="rounded-xl border px-3 py-1 hover:bg-neutral-50"
@@ -303,7 +278,7 @@ export default function DashboardClient({ forms, stats }: Props) {
                           {T.actions.report}
                         </Link>
 
-                        {/* QR (modal FR/EN) */}
+                        {/* QR → modal avec onglets FR/EN */}
                         <button
                           type="button"
                           className="rounded-xl border px-3 py-1 hover:bg-neutral-50"
@@ -316,117 +291,31 @@ export default function DashboardClient({ forms, stats }: Props) {
                           {T.actions.qr}
                         </button>
 
-                        {/* Lien (menu FR/EN copier / ouvrir) */}
-                        <div className="relative">
-                          <button
-                            type="button"
-                            className="rounded-xl border px-3 py-1 hover:bg-neutral-50"
-                            onClick={() => setOpenMenu(isMenuOpen ? null : f.id)}
-                            title={T.actions.link}
-                          >
-                            {T.actions.link}
-                          </button>
-                          {isMenuOpen && (
-                            <div
-                              className="absolute right-0 mt-2 w-56 rounded-xl border bg-white shadow z-10"
-                              onMouseLeave={() => setOpenMenu(null)}
-                            >
-                              {/* FR */}
-                              <div className="px-3 py-2 border-b">
-                                <div className="text-xs text-neutral-500 mb-2">{T.menus.fr}</div>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    className="text-xs rounded-lg border px-2 py-1 hover:bg-neutral-50"
-                                    onClick={async () => {
-                                      const ok = await copy(frLink);
-                                      alert(ok ? T.menus.copied : "Error");
-                                      setOpenMenu(null);
-                                    }}
-                                  >
-                                    {T.menus.copy}
-                                  </button>
-                                  <Link
-                                    href={frLink}
-                                    target="_blank"
-                                    className="text-xs rounded-lg border px-2 py-1 hover:bg-neutral-50"
-                                  >
-                                    {T.menus.open}
-                                  </Link>
-                                </div>
-                              </div>
-                              {/* EN */}
-                              <div className="px-3 py-2">
-                                <div className="text-xs text-neutral-500 mb-2">{T.menus.en}</div>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    className="text-xs rounded-lg border px-2 py-1 hover:bg-neutral-50"
-                                    onClick={async () => {
-                                      const ok = await copy(enLink);
-                                      alert(ok ? T.menus.copied : "Error");
-                                      setOpenMenu(null);
-                                    }}
-                                  >
-                                    {T.menus.copy}
-                                  </button>
-                                  <Link
-                                    href={enLink}
-                                    target="_blank"
-                                    className="text-xs rounded-lg border px-2 py-1 hover:bg-neutral-50"
-                                  >
-                                    {T.menus.open}
-                                  </Link>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
+                        {/* Lien → modal avec onglets FR/EN (copier/ouvrir) */}
+                        <button
+                          type="button"
+                          className="rounded-xl border px-3 py-1 hover:bg-neutral-50"
+                          onClick={() => {
+                            setLinkTab("fr");
+                            setLinkFor(f.id);
+                          }}
+                          title={T.actions.link}
+                        >
+                          {T.actions.link}
+                        </button>
 
-                        {/* Export (menu FR/EN téléchargement) */}
-                        <div className="relative">
-                          <button
-                            type="button"
-                            className="rounded-xl border px-3 py-1 hover:bg-neutral-50"
-                            onClick={() => setOpenMenu(isMenuOpen ? null : f.id)}
-                            title={T.actions.export}
-                          >
-                            {T.actions.export}
-                          </button>
-                          {isMenuOpen && (
-                            <div
-                              className="absolute right-0 mt-2 w-56 rounded-xl border bg-white shadow z-10"
-                              onMouseLeave={() => setOpenMenu(null)}
-                            >
-                              {/* FR */}
-                              <div className="px-3 py-2 border-b">
-                                <div className="text-xs text-neutral-500 mb-2">{T.menus.fr}</div>
-                                <div className="flex items-center gap-2">
-                                  <Link
-                                    href={frXls}
-                                    target="_blank"
-                                    className="text-xs rounded-lg border px-2 py-1 hover:bg-neutral-50"
-                                    onClick={() => setOpenMenu(null)}
-                                  >
-                                    {T.menus.download}
-                                  </Link>
-                                </div>
-                              </div>
-                              {/* EN */}
-                              <div className="px-3 py-2">
-                                <div className="text-xs text-neutral-500 mb-2">{T.menus.en}</div>
-                                <div className="flex items-center gap-2">
-                                  <Link
-                                    href={enXls}
-                                    target="_blank"
-                                    className="text-xs rounded-lg border px-2 py-1 hover:bg-neutral-50"
-                                    onClick={() => setOpenMenu(null)}
-                                  >
-                                    {T.menus.download}
-                                  </Link>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
+                        {/* Export → modal avec onglets FR/EN (télécharger) */}
+                        <button
+                          type="button"
+                          className="rounded-xl border px-3 py-1 hover:bg-neutral-50"
+                          onClick={() => {
+                            setExportTab("fr");
+                            setExportFor(f.id);
+                          }}
+                          title={T.actions.export}
+                        >
+                          {T.actions.export}
+                        </button>
 
                         {/* Supprimer */}
                         <button
@@ -438,6 +327,9 @@ export default function DashboardClient({ forms, stats }: Props) {
                         >
                           {T.actions.delete}
                         </button>
+
+                        {/* Données “cachées” pour les modales (pas rendu visible) */}
+                        <span className="hidden" data-fr={frLink} data-en={enLink} data-frxls={frXls} data-enxls={enXls} />
                       </div>
                     </td>
                   </tr>
@@ -457,7 +349,7 @@ export default function DashboardClient({ forms, stats }: Props) {
 
       {/* Modal QR */}
       {qrFor && (
-        <div className="fixed inset-0 z-20 bg-black/30 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-40 bg-black/30 flex items-center justify-center p-4">
           <div className="w-full max-w-md rounded-2xl bg-white shadow border">
             <div className="p-4 border-b flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -474,7 +366,6 @@ export default function DashboardClient({ forms, stats }: Props) {
               </button>
             </div>
             <div className="p-6 flex flex-col items-center gap-4">
-              {/* On retrouve le form en question */}
               {(() => {
                 const f = forms.find((x) => x.id === qrFor)!;
                 const link = urlPublic(f.slug, qrTab);
@@ -505,6 +396,99 @@ export default function DashboardClient({ forms, stats }: Props) {
                         className="rounded-lg border px-3 py-1 text-sm hover:bg-neutral-50"
                       >
                         {T.menus.open}
+                      </a>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal LIEN */}
+      {linkFor && (
+        <div className="fixed inset-0 z-40 bg-black/30 flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow border">
+            <div className="p-4 border-b flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <LanguageToggle value={linkTab} onChange={(v) => setLinkTab(v)} size="sm" />
+                <div className="text-sm text-neutral-500">
+                  {linkTab === "fr" ? TEXTS[uiLang].menus.urlFr : TEXTS[uiLang].menus.urlEn}
+                </div>
+              </div>
+              <button
+                className="rounded-lg border px-2 py-1 text-sm hover:bg-neutral-50"
+                onClick={() => setLinkFor(null)}
+              >
+                {T.menus.close}
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {(() => {
+                const f = forms.find((x) => x.id === linkFor)!;
+                const link = urlPublic(f.slug, linkTab);
+                return (
+                  <>
+                    <div className="text-xs text-neutral-500">{link}</div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="rounded-lg border px-3 py-1 text-sm hover:bg-neutral-50"
+                        onClick={async () => {
+                          const ok = await copy(link);
+                          alert(ok ? T.menus.copied : "Error");
+                        }}
+                      >
+                        {T.menus.copy}
+                      </button>
+                      <a
+                        href={link}
+                        target="_blank"
+                        className="rounded-lg border px-3 py-1 text-sm hover:bg-neutral-50"
+                      >
+                        {T.menus.open}
+                      </a>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal EXPORT */}
+      {exportFor && (
+        <div className="fixed inset-0 z-40 bg-black/30 flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow border">
+            <div className="p-4 border-b flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <LanguageToggle value={exportTab} onChange={(v) => setExportTab(v)} size="sm" />
+                <div className="text-sm text-neutral-500">
+                  {exportTab === "fr" ? TEXTS[uiLang].menus.xlsxFr : TEXTS[uiLang].menus.xlsxEn}
+                </div>
+              </div>
+              <button
+                className="rounded-lg border px-2 py-1 text-sm hover:bg-neutral-50"
+                onClick={() => setExportFor(null)}
+              >
+                {T.menus.close}
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {(() => {
+                const f = forms.find((x) => x.id === exportFor)!;
+                const xls = urlExport(f.id, exportTab);
+                return (
+                  <>
+                    <div className="text-xs text-neutral-500">{xls}</div>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={xls}
+                        target="_blank"
+                        className="rounded-lg border px-3 py-1 text-sm hover:bg-neutral-50"
+                      >
+                        {T.menus.download}
                       </a>
                     </div>
                   </>
