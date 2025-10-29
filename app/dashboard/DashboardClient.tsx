@@ -7,7 +7,8 @@ export type FormRow = {
   id: string;
   title: string;
   slug: string;
-  createdAt: string | Date;
+  // 👇 IMPORTANT : string | null (sérialisation Next des Date)
+  createdAt: string | null;
   isOpen: boolean;
 };
 
@@ -29,12 +30,12 @@ export default function DashboardClient({
   const [showLink, setShowLink] = useState<string | null>(null);
   const [showExport, setShowExport] = useState<string | null>(null);
 
-  // ✅ Détection correcte du domaine
+  // ✅ Détection correcte du domaine (évite les URLs doublées)
   const base =
     typeof window !== "undefined"
       ? window.location.origin
       : process.env.NEXT_PUBLIC_BASE_URL?.startsWith("http")
-      ? process.env.NEXT_PUBLIC_BASE_URL
+      ? process.env.NEXT_PUBLIC_BASE_URL!
       : process.env.NEXT_PUBLIC_BASE_URL
       ? `https://${process.env.NEXT_PUBLIC_BASE_URL}`
       : "";
@@ -99,18 +100,16 @@ export default function DashboardClient({
           >
             <div>
               <h3 className="font-semibold">{f.title}</h3>
-              <p className="text-xs text-neutral-500">
-                {lang === "fr" ? "Slug" : "Slug"}: {f.slug}
-              </p>
+              <p className="text-xs text-neutral-500">Slug: {f.slug}</p>
               <p className="text-xs text-neutral-500">
                 {lang === "fr" ? "Créé le" : "Created"}{" "}
-                {new Date(f.createdAt).toLocaleDateString()}
+                {f.createdAt ? new Date(f.createdAt).toLocaleDateString() : "—"}
               </p>
             </div>
 
             {/* Actions */}
             <div className="flex flex-wrap gap-2">
-              {/* ✅ Bouton Rapport */}
+              {/* 📊 Rapport */}
               <Link
                 href={`/dashboard/forms/${f.id}/report?lang=${lang}`}
                 className="px-3 py-1.5 border rounded-xl text-sm hover:bg-neutral-100"
@@ -118,7 +117,7 @@ export default function DashboardClient({
                 📊 {lang === "fr" ? "Rapport" : "Report"}
               </Link>
 
-              {/* ✅ Bouton QR */}
+              {/* 📱 QR */}
               <button
                 onClick={() => setShowQR(f.id)}
                 className="px-3 py-1.5 border rounded-xl text-sm hover:bg-neutral-100"
@@ -126,7 +125,7 @@ export default function DashboardClient({
                 📱 QR
               </button>
 
-              {/* ✅ Bouton Liens */}
+              {/* 🔗 Liens */}
               <button
                 onClick={() => setShowLink(f.id)}
                 className="px-3 py-1.5 border rounded-xl text-sm hover:bg-neutral-100"
@@ -134,7 +133,7 @@ export default function DashboardClient({
                 🔗 {lang === "fr" ? "Lien" : "Link"}
               </button>
 
-              {/* ✅ Bouton Export */}
+              {/* 📤 Export */}
               <button
                 onClick={() => setShowExport(f.id)}
                 className="px-3 py-1.5 border rounded-xl text-sm hover:bg-neutral-100"
@@ -142,7 +141,7 @@ export default function DashboardClient({
                 📤 {lang === "fr" ? "Exporter" : "Export"}
               </button>
 
-              {/* ✅ Bouton Supprimer */}
+              {/* 🗑 Supprimer */}
               <button
                 onClick={async () => {
                   if (
@@ -165,21 +164,21 @@ export default function DashboardClient({
         ))}
       </section>
 
-      {/* ✅ Modale QR */}
+      {/* Modale QR */}
       {showQR && (
         <Modal title="QR Codes" onClose={() => setShowQR(null)}>
           <ModalQR base={base} forms={forms} id={showQR} />
         </Modal>
       )}
 
-      {/* ✅ Modale Lien */}
+      {/* Modale Lien */}
       {showLink && (
         <Modal title="Liens du formulaire" onClose={() => setShowLink(null)}>
           <ModalLinks base={base} forms={forms} id={showLink} />
         </Modal>
       )}
 
-      {/* ✅ Modale Export */}
+      {/* Modale Export */}
       {showExport && (
         <Modal title="Exporter en Excel" onClose={() => setShowExport(null)}>
           <ModalExport id={showExport} />
