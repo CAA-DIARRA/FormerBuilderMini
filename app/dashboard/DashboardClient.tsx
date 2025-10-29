@@ -1,503 +1,318 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 
-/* ------------------------------------------------------------------ */
-/* Types d'entrée attendus depuis page.tsx                             */
-/* ------------------------------------------------------------------ */
-type FormRow = {
+export type FormRow = {
   id: string;
   title: string;
   slug: string;
+  createdAt: string | Date;
   isOpen: boolean;
-  createdAt: string | null; // sérialisé dans page.tsx
 };
 
-type Stats = {
+export type Stats = {
   totalForms: number;
   totalResponses: number;
   activeForms: number;
 };
 
-type Props = {
+export default function DashboardClient({
+  forms,
+  stats,
+}: {
   forms: FormRow[];
   stats: Stats;
-};
-
-/* ------------------------------------------------------------------ */
-/* Petit composant LanguageToggle (évite l'import externe)             */
-/* ------------------------------------------------------------------ */
-function LanguageToggle({
-  value,
-  onChange,
-  size = "md",
-}: {
-  value: "fr" | "en";
-  onChange: (v: "fr" | "en") => void;
-  size?: "sm" | "md";
 }) {
-  const cls =
-    size === "sm"
-      ? "text-xs px-2 py-1"
-      : "text-sm px-3 py-1.5";
+  const [lang, setLang] = useState<"fr" | "en">("fr");
+  const [showQR, setShowQR] = useState<string | null>(null);
+  const [showLink, setShowLink] = useState<string | null>(null);
+  const [showExport, setShowExport] = useState<string | null>(null);
+
+  // ✅ Détection correcte du domaine
+  const base =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : process.env.NEXT_PUBLIC_BASE_URL?.startsWith("http")
+      ? process.env.NEXT_PUBLIC_BASE_URL
+      : process.env.NEXT_PUBLIC_BASE_URL
+      ? `https://${process.env.NEXT_PUBLIC_BASE_URL}`
+      : "";
+
   return (
-    <div className="inline-flex rounded-xl border overflow-hidden">
-      <button
-        className={`${cls} ${value === "fr" ? "bg-black text-white" : "bg-white text-black hover:bg-neutral-100"}`}
-        onClick={() => onChange("fr")}
-        type="button"
-      >
-        FR
-      </button>
-      <button
-        className={`${cls} ${value === "en" ? "bg-black text-white" : "bg-white text-black hover:bg-neutral-100"}`}
-        onClick={() => onChange("en")}
-        type="button"
-      >
-        EN
-      </button>
+    <div className="max-w-6xl mx-auto p-6 space-y-8">
+      {/* HEADER */}
+      <header className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold">
+          {lang === "fr" ? "Tableau de bord" : "Dashboard"}
+        </h1>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setLang(lang === "fr" ? "en" : "fr")}
+            className="px-3 py-2 border rounded-xl"
+          >
+            {lang === "fr" ? "🇬🇧 English" : "🇫🇷 Français"}
+          </button>
+          <Link
+            href={`/forms/new?lang=${lang}`}
+            className="px-4 py-2 rounded-xl bg-black text-white hover:bg-neutral-800 transition"
+          >
+            {lang === "fr" ? "Nouveau formulaire" : "New form"}
+          </Link>
+        </div>
+      </header>
+
+      {/* STATS */}
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="p-4 border rounded-2xl bg-white shadow">
+          <h2 className="text-sm text-neutral-500">
+            {lang === "fr" ? "Formulaires" : "Forms"}
+          </h2>
+          <p className="text-2xl font-bold">{stats.totalForms}</p>
+        </div>
+        <div className="p-4 border rounded-2xl bg-white shadow">
+          <h2 className="text-sm text-neutral-500">
+            {lang === "fr" ? "Réponses" : "Responses"}
+          </h2>
+          <p className="text-2xl font-bold">{stats.totalResponses}</p>
+        </div>
+        <div className="p-4 border rounded-2xl bg-white shadow">
+          <h2 className="text-sm text-neutral-500">
+            {lang === "fr" ? "Actifs" : "Active"}
+          </h2>
+          <p className="text-2xl font-bold">{stats.activeForms}</p>
+        </div>
+      </section>
+
+      {/* LISTE DES FORMULAIRES */}
+      <section className="space-y-3">
+        {forms.length === 0 && (
+          <p className="opacity-70 text-sm">
+            {lang === "fr" ? "Aucun formulaire disponible." : "No form found."}
+          </p>
+        )}
+
+        {forms.map((f) => (
+          <div
+            key={f.id}
+            className="p-4 border rounded-2xl bg-white flex flex-col md:flex-row md:items-center justify-between gap-3 shadow"
+          >
+            <div>
+              <h3 className="font-semibold">{f.title}</h3>
+              <p className="text-xs text-neutral-500">
+                {lang === "fr" ? "Slug" : "Slug"}: {f.slug}
+              </p>
+              <p className="text-xs text-neutral-500">
+                {lang === "fr" ? "Créé le" : "Created"}{" "}
+                {new Date(f.createdAt).toLocaleDateString()}
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-wrap gap-2">
+              {/* ✅ Bouton Rapport */}
+              <Link
+                href={`/dashboard/forms/${f.id}/report?lang=${lang}`}
+                className="px-3 py-1.5 border rounded-xl text-sm hover:bg-neutral-100"
+              >
+                📊 {lang === "fr" ? "Rapport" : "Report"}
+              </Link>
+
+              {/* ✅ Bouton QR */}
+              <button
+                onClick={() => setShowQR(f.id)}
+                className="px-3 py-1.5 border rounded-xl text-sm hover:bg-neutral-100"
+              >
+                📱 QR
+              </button>
+
+              {/* ✅ Bouton Liens */}
+              <button
+                onClick={() => setShowLink(f.id)}
+                className="px-3 py-1.5 border rounded-xl text-sm hover:bg-neutral-100"
+              >
+                🔗 {lang === "fr" ? "Lien" : "Link"}
+              </button>
+
+              {/* ✅ Bouton Export */}
+              <button
+                onClick={() => setShowExport(f.id)}
+                className="px-3 py-1.5 border rounded-xl text-sm hover:bg-neutral-100"
+              >
+                📤 {lang === "fr" ? "Exporter" : "Export"}
+              </button>
+
+              {/* ✅ Bouton Supprimer */}
+              <button
+                onClick={async () => {
+                  if (
+                    confirm(
+                      lang === "fr"
+                        ? "Supprimer définitivement ce formulaire ?"
+                        : "Delete this form permanently?"
+                    )
+                  ) {
+                    await fetch(`/api/forms/${f.id}`, { method: "DELETE" });
+                    location.reload();
+                  }
+                }}
+                className="px-3 py-1.5 border border-red-500 text-red-500 rounded-xl text-sm hover:bg-red-50"
+              >
+                🗑 {lang === "fr" ? "Supprimer" : "Delete"}
+              </button>
+            </div>
+          </div>
+        ))}
+      </section>
+
+      {/* ✅ Modale QR */}
+      {showQR && (
+        <Modal title="QR Codes" onClose={() => setShowQR(null)}>
+          <ModalQR base={base} forms={forms} id={showQR} />
+        </Modal>
+      )}
+
+      {/* ✅ Modale Lien */}
+      {showLink && (
+        <Modal title="Liens du formulaire" onClose={() => setShowLink(null)}>
+          <ModalLinks base={base} forms={forms} id={showLink} />
+        </Modal>
+      )}
+
+      {/* ✅ Modale Export */}
+      {showExport && (
+        <Modal title="Exporter en Excel" onClose={() => setShowExport(null)}>
+          <ModalExport id={showExport} />
+        </Modal>
+      )}
     </div>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Libellés FR/EN                                                     */
-/* ------------------------------------------------------------------ */
-const TEXTS = {
-  fr: {
-    title: "Tableau de bord",
-    cards: { forms: "Formulaires", responses: "Réponses", active: "Actifs" },
-    table: {
-      title: "Formations",
-      th: { name: "Intitulé", slug: "Slug", created: "Créé le", status: "Statut", actions: "Actions" },
-      open: "Ouvert",
-      closed: "Fermé",
-    },
-    actions: { view: "Ouvrir", qr: "QR", link: "Lien", export: "Exporter", delete: "Supprimer", report: "Rapport" },
-    menus: {
-      fr: "Français",
-      en: "Anglais",
-      copy: "Copier",
-      open: "Ouvrir",
-      download: "Télécharger",
-      close: "Fermer",
-      confirmDelete: "Supprimer cette formation ?",
-      deleted: "Formation supprimée.",
-      copied: "Copié !",
-      urlFr: "Lien (FR)",
-      urlEn: "Lien (EN)",
-      xlsxFr: "Export Excel (FR)",
-      xlsxEn: "Export Excel (EN)",
-    },
-  },
-  en: {
-    title: "Dashboard",
-    cards: { forms: "Forms", responses: "Responses", active: "Active" },
-    table: {
-      title: "Trainings",
-      th: { name: "Title", slug: "Slug", created: "Created at", status: "Status", actions: "Actions" },
-      open: "Open",
-      closed: "Closed",
-    },
-    actions: { view: "Open", qr: "QR", link: "Link", export: "Export", delete: "Delete", report: "Report" },
-    menus: {
-      fr: "French",
-      en: "English",
-      copy: "Copy",
-      open: "Open",
-      download: "Download",
-      close: "Close",
-      confirmDelete: "Delete this training?",
-      deleted: "Training deleted.",
-      copied: "Copied!",
-      urlFr: "Public link (FR)",
-      urlEn: "Public link (EN)",
-      xlsxFr: "Excel export (FR)",
-      xlsxEn: "Excel export (EN)",
-    },
-  },
-} as const;
+/* ---------------------- MODALES ---------------------- */
 
-/* ------------------------------------------------------------------ */
-/* Helpers                                                             */
-/* ------------------------------------------------------------------ */
-function frDate(iso: string | null) {
-  if (!iso) return "";
-  try {
-    return new Date(iso).toLocaleDateString();
-  } catch {
-    return iso;
-  }
+function Modal({
+  title,
+  children,
+  onClose,
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+      <div className="bg-white rounded-2xl p-6 w-[90%] max-w-lg space-y-4 shadow-lg">
+        <div className="flex justify-between items-center">
+          <h2 className="font-semibold text-lg">{title}</h2>
+          <button onClick={onClose} className="text-neutral-500 hover:text-black">
+            ✖
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
 }
 
-function urlPublic(slug: string, lang: "fr" | "en") {
-  const base = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/+$/, "") || "";
-  return `${base}/f/${slug}?lang=${lang}`;
-}
+/* ---------------------- QR ---------------------- */
+function ModalQR({
+  base,
+  forms,
+  id,
+}: {
+  base: string;
+  forms: FormRow[];
+  id: string;
+}) {
+  const form = forms.find((f) => f.id === id);
+  if (!form) return null;
+  const frUrl = `${base}/f/${form.slug}?lang=fr`;
+  const enUrl = `${base}/f/${form.slug}?lang=en`;
 
-function urlExport(formId: string, lang: "fr" | "en") {
-  const base = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/+$/, "") || "";
-  return `${base}/api/forms/${formId}/export?lang=${lang}`;
-}
-
-function qrSrc(link: string, size = 220) {
-  const safe = encodeURIComponent(link);
-  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${safe}`;
-}
-
-async function copy(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/* Composant principal                                                 */
-/* ------------------------------------------------------------------ */
-export default function DashboardClient({ forms, stats }: Props) {
-  const [uiLang, setUiLang] = useState<"fr" | "en">("fr");
-  const T = useMemo(() => TEXTS[uiLang], [uiLang]);
-
-  // États des modales par action
-  const [qrFor, setQrFor] = useState<string | null>(null);
-  const [qrTab, setQrTab] = useState<"fr" | "en">("fr");
-
-  const [linkFor, setLinkFor] = useState<string | null>(null);
-  const [linkTab, setLinkTab] = useState<"fr" | "en">("fr");
-
-  const [exportFor, setExportFor] = useState<string | null>(null);
-  const [exportTab, setExportTab] = useState<"fr" | "en">("fr");
-
-  // suppression (optimiste)
-  const [busyId, setBusyId] = useState<string | null>(null);
-
-  const onDelete = async (form: FormRow) => {
-    if (!confirm(T.menus.confirmDelete)) return;
-    try {
-      setBusyId(form.id);
-      const res = await fetch(`/api/forms/${form.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("delete_failed");
-      alert(T.menus.deleted);
-      location.reload();
-    } catch {
-      alert("Error");
-    } finally {
-      setBusyId(null);
-    }
-  };
+  const qrFr = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(
+    frUrl
+  )}`;
+  const qrEn = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(
+    enUrl
+  )}`;
 
   return (
-    <div className="mx-auto max-w-6xl p-6 space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl md:text-3xl font-bold">{T.title}</h1>
-        <div className="flex items-center gap-3">
-          <LanguageToggle value={uiLang} onChange={setUiLang} />
-          <Link
-            href={`/forms/new${uiLang ? `?lang=${uiLang}` : ""}`}
-            className="inline-flex items-center rounded-xl bg-black px-4 py-2 text-white hover:bg-neutral-800 transition"
-          >
-            + {uiLang === "fr" ? "Nouveau formulaire" : "New form"}
-          </Link>
+    <div className="flex flex-col items-center gap-6">
+      <div className="flex gap-4">
+        <div className="text-center">
+          <img src={qrFr} alt="QR FR" className="border rounded-xl" />
+          <p className="text-xs mt-2">Formulaire Français</p>
+        </div>
+        <div className="text-center">
+          <img src={qrEn} alt="QR EN" className="border rounded-xl" />
+          <p className="text-xs mt-2">Formulaire Anglais</p>
         </div>
       </div>
+      <a href={frUrl} className="text-sm underline">
+        {frUrl}
+      </a>
+      <a href={enUrl} className="text-sm underline">
+        {enUrl}
+      </a>
+    </div>
+  );
+}
 
-      {/* Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="rounded-2xl border p-4 bg-white">
-          <div className="text-sm text-neutral-500">{T.cards.forms}</div>
-          <div className="text-3xl font-semibold">{stats.totalForms}</div>
-        </div>
-        <div className="rounded-2xl border p-4 bg-white">
-          <div className="text-sm text-neutral-500">{T.cards.responses}</div>
-          <div className="text-3xl font-semibold">{stats.totalResponses}</div>
-        </div>
-        <div className="rounded-2xl border p-4 bg-white">
-          <div className="text-sm text-neutral-500">{T.cards.active}</div>
-          <div className="text-3xl font-semibold">{stats.activeForms}</div>
-        </div>
+/* ---------------------- LIENS ---------------------- */
+function ModalLinks({
+  base,
+  forms,
+  id,
+}: {
+  base: string;
+  forms: FormRow[];
+  id: string;
+}) {
+  const form = forms.find((f) => f.id === id);
+  if (!form) return null;
+  const frUrl = `${base}/f/${form.slug}?lang=fr`;
+  const enUrl = `${base}/f/${form.slug}?lang=en`;
+  return (
+    <div className="space-y-3 text-sm">
+      <div>
+        <p>🇫🇷 Lien Français</p>
+        <input
+          readOnly
+          value={frUrl}
+          className="w-full border rounded-xl p-2"
+          onFocus={(e) => e.target.select()}
+        />
       </div>
-
-      {/* Table */}
-      <div className="rounded-2xl border bg-white overflow-hidden">
-        <div className="px-4 py-3 border-b text-sm font-semibold">{T.table.title}</div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-neutral-50">
-              <tr>
-                <th className="px-4 py-2 text-left">{T.table.th.name}</th>
-                <th className="px-4 py-2 text-left">{T.table.th.slug}</th>
-                <th className="px-4 py-2 text-left">{T.table.th.created}</th>
-                <th className="px-4 py-2 text-left">{T.table.th.status}</th>
-                <th className="px-4 py-2 text-right">{T.table.th.actions}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {forms.map((f) => {
-                const frLink = urlPublic(f.slug, "fr");
-                const enLink = urlPublic(f.slug, "en");
-                const frXls = urlExport(f.id, "fr");
-                const enXls = urlExport(f.id, "en");
-
-                return (
-                  <tr key={f.id} className="border-t">
-                    <td className="px-4 py-2">{f.title}</td>
-                    <td className="px-4 py-2">{f.slug}</td>
-                    <td className="px-4 py-2">{frDate(f.createdAt)}</td>
-                    <td className="px-4 py-2">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${
-                          f.isOpen ? "bg-green-100 text-green-700" : "bg-neutral-100 text-neutral-700"
-                        }`}
-                      >
-                        {f.isOpen ? T.table.open : T.table.closed}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="flex items-center justify-end gap-2">
-                        {/* Ouvrir (vue publique, langue = uiLang) */}
-                        <Link
-                          href={urlPublic(f.slug, uiLang)}
-                          target="_blank"
-                          className="rounded-xl border px-3 py-1 hover:bg-neutral-50"
-                          title={T.actions.view}
-                        >
-                          {T.actions.view}
-                        </Link>
-
-                        {/* Rapport (si page existante) */}
-                        <Link
-                          href={`/forms/${f.id}/report`}
-                          className="rounded-xl border px-3 py-1 hover:bg-neutral-50"
-                          title={T.actions.report}
-                        >
-                          {T.actions.report}
-                        </Link>
-
-                        {/* QR → modal avec onglets FR/EN */}
-                        <button
-                          type="button"
-                          className="rounded-xl border px-3 py-1 hover:bg-neutral-50"
-                          onClick={() => {
-                            setQrTab("fr");
-                            setQrFor(f.id);
-                          }}
-                          title={T.actions.qr}
-                        >
-                          {T.actions.qr}
-                        </button>
-
-                        {/* Lien → modal avec onglets FR/EN (copier/ouvrir) */}
-                        <button
-                          type="button"
-                          className="rounded-xl border px-3 py-1 hover:bg-neutral-50"
-                          onClick={() => {
-                            setLinkTab("fr");
-                            setLinkFor(f.id);
-                          }}
-                          title={T.actions.link}
-                        >
-                          {T.actions.link}
-                        </button>
-
-                        {/* Export → modal avec onglets FR/EN (télécharger) */}
-                        <button
-                          type="button"
-                          className="rounded-xl border px-3 py-1 hover:bg-neutral-50"
-                          onClick={() => {
-                            setExportTab("fr");
-                            setExportFor(f.id);
-                          }}
-                          title={T.actions.export}
-                        >
-                          {T.actions.export}
-                        </button>
-
-                        {/* Supprimer */}
-                        <button
-                          type="button"
-                          className="rounded-xl border px-3 py-1 hover:bg-red-50 text-red-700 border-red-300 disabled:opacity-50"
-                          onClick={() => onDelete(f)}
-                          disabled={busyId === f.id}
-                          title={T.actions.delete}
-                        >
-                          {T.actions.delete}
-                        </button>
-
-                        {/* Données “cachées” pour les modales (pas rendu visible) */}
-                        <span className="hidden" data-fr={frLink} data-en={enLink} data-frxls={frXls} data-enxls={enXls} />
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {forms.length === 0 && (
-                <tr>
-                  <td className="px-4 py-6 text-center text-neutral-500" colSpan={5}>
-                    {uiLang === "fr" ? "Aucun formulaire" : "No forms yet"}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+      <div>
+        <p>🇬🇧 Lien Anglais</p>
+        <input
+          readOnly
+          value={enUrl}
+          className="w-full border rounded-xl p-2"
+          onFocus={(e) => e.target.select()}
+        />
       </div>
+    </div>
+  );
+}
 
-      {/* Modal QR */}
-      {qrFor && (
-        <div className="fixed inset-0 z-40 bg-black/30 flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white shadow border">
-            <div className="p-4 border-b flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <LanguageToggle value={qrTab} onChange={(v) => setQrTab(v)} size="sm" />
-                <div className="text-sm text-neutral-500">
-                  {qrTab === "fr" ? TEXTS[uiLang].menus.fr : TEXTS[uiLang].menus.en}
-                </div>
-              </div>
-              <button
-                className="rounded-lg border px-2 py-1 text-sm hover:bg-neutral-50"
-                onClick={() => setQrFor(null)}
-              >
-                {T.menus.close}
-              </button>
-            </div>
-            <div className="p-6 flex flex-col items-center gap-4">
-              {(() => {
-                const f = forms.find((x) => x.id === qrFor)!;
-                const link = urlPublic(f.slug, qrTab);
-                const src = qrSrc(link, 240);
-                return (
-                  <>
-                    <img src={src} alt="QR" className="rounded-lg border" />
-                    <div className="flex items-center gap-2">
-                      <button
-                        className="rounded-lg border px-3 py-1 text-sm hover:bg-neutral-50"
-                        onClick={async () => {
-                          const ok = await copy(link);
-                          alert(ok ? T.menus.copied : "Error");
-                        }}
-                      >
-                        {T.menus.copy} URL
-                      </button>
-                      <a
-                        href={src}
-                        download={`qr_${f.slug}_${qrTab}.png`}
-                        className="rounded-lg border px-3 py-1 text-sm hover:bg-neutral-50"
-                      >
-                        {T.menus.download} PNG
-                      </a>
-                      <a
-                        href={link}
-                        target="_blank"
-                        className="rounded-lg border px-3 py-1 text-sm hover:bg-neutral-50"
-                      >
-                        {T.menus.open}
-                      </a>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal LIEN */}
-      {linkFor && (
-        <div className="fixed inset-0 z-40 bg-black/30 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow border">
-            <div className="p-4 border-b flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <LanguageToggle value={linkTab} onChange={(v) => setLinkTab(v)} size="sm" />
-                <div className="text-sm text-neutral-500">
-                  {linkTab === "fr" ? TEXTS[uiLang].menus.urlFr : TEXTS[uiLang].menus.urlEn}
-                </div>
-              </div>
-              <button
-                className="rounded-lg border px-2 py-1 text-sm hover:bg-neutral-50"
-                onClick={() => setLinkFor(null)}
-              >
-                {T.menus.close}
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              {(() => {
-                const f = forms.find((x) => x.id === linkFor)!;
-                const link = urlPublic(f.slug, linkTab);
-                return (
-                  <>
-                    <div className="text-xs text-neutral-500">{link}</div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        className="rounded-lg border px-3 py-1 text-sm hover:bg-neutral-50"
-                        onClick={async () => {
-                          const ok = await copy(link);
-                          alert(ok ? T.menus.copied : "Error");
-                        }}
-                      >
-                        {T.menus.copy}
-                      </button>
-                      <a
-                        href={link}
-                        target="_blank"
-                        className="rounded-lg border px-3 py-1 text-sm hover:bg-neutral-50"
-                      >
-                        {T.menus.open}
-                      </a>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal EXPORT */}
-      {exportFor && (
-        <div className="fixed inset-0 z-40 bg-black/30 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow border">
-            <div className="p-4 border-b flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <LanguageToggle value={exportTab} onChange={(v) => setExportTab(v)} size="sm" />
-                <div className="text-sm text-neutral-500">
-                  {exportTab === "fr" ? TEXTS[uiLang].menus.xlsxFr : TEXTS[uiLang].menus.xlsxEn}
-                </div>
-              </div>
-              <button
-                className="rounded-lg border px-2 py-1 text-sm hover:bg-neutral-50"
-                onClick={() => setExportFor(null)}
-              >
-                {T.menus.close}
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              {(() => {
-                const f = forms.find((x) => x.id === exportFor)!;
-                const xls = urlExport(f.id, exportTab);
-                return (
-                  <>
-                    <div className="text-xs text-neutral-500">{xls}</div>
-                    <div className="flex items-center gap-2">
-                      <a
-                        href={xls}
-                        target="_blank"
-                        className="rounded-lg border px-3 py-1 text-sm hover:bg-neutral-50"
-                      >
-                        {T.menus.download}
-                      </a>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-          </div>
-        </div>
-      )}
+/* ---------------------- EXPORT ---------------------- */
+function ModalExport({ id }: { id: string }) {
+  return (
+    <div className="space-y-4">
+      <a
+        href={`/api/forms/${id}/export?lang=fr`}
+        className="block text-center px-4 py-2 bg-black text-white rounded-xl"
+      >
+        🇫🇷 Télécharger (FR)
+      </a>
+      <a
+        href={`/api/forms/${id}/export?lang=en`}
+        className="block text-center px-4 py-2 border rounded-xl"
+      >
+        🇬🇧 Download (EN)
+      </a>
     </div>
   );
 }
