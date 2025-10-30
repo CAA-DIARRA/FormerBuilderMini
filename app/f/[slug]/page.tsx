@@ -1,13 +1,13 @@
 import { PrismaClient } from "@prisma/client";
 import { notFound } from "next/navigation";
-import nextDynamic from "next/dynamic"; // ⬅️ alias pour éviter le conflit
+import nextDynamic from "next/dynamic"; // ✅ alias pour éviter le conflit de nom
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const prisma = new PrismaClient();
 
-// On charge le wrapper côté client pour éviter les re-renders qui cassent le focus des inputs
+// On charge le shell client pour protéger le focus des inputs (pas de re-render serveur)
 const PublicFormShell = nextDynamic(() => import("../../components/PublicFormShell"), {
   ssr: false,
 });
