@@ -1,16 +1,12 @@
+// app/f/[slug]/page.tsx
 import { PrismaClient } from "@prisma/client";
 import { notFound } from "next/navigation";
-import nextDynamic from "next/dynamic"; // ✅ alias pour éviter le conflit de nom
+import PublicFormShell from "@/app/components/PublicFormShell";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const prisma = new PrismaClient();
-
-// On charge le shell client pour protéger le focus des inputs (pas de re-render serveur)
-const PublicFormShell = nextDynamic(() => import("../../components/PublicFormShell"), {
-  ssr: false,
-});
 
 export default async function PublicFormPage({
   params,
@@ -22,16 +18,15 @@ export default async function PublicFormPage({
   const form = await prisma.form.findUnique({ where: { slug: params.slug } });
   if (!form) return notFound();
 
-  const serverLang = searchParams?.lang === "en" ? "en" : "fr";
+  const serverLang: "fr" | "en" = searchParams?.lang === "en" ? "en" : "fr";
 
   if (searchParams?.debug === "1") {
     return (
       <pre style={{ padding: 16 }}>
-        {"DEBUG VIEW\n\n"}
         {JSON.stringify(
           {
             slug: params.slug,
-            lang: serverLang,
+            serverLang,
             title: form.title,
             trainerName: form.trainerName,
             sessionDate: form.sessionDate,
@@ -45,5 +40,6 @@ export default async function PublicFormPage({
     );
   }
 
+  // 🚫 Pas de setState ici, pas de modif d’URL → pas de remount côté saisie
   return <PublicFormShell form={form} serverLang={serverLang} />;
 }
