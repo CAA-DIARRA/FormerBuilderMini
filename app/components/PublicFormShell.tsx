@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import LanguageToggle, { type Lang } from "./LanguageToggle";
 import FormClient from "./FormClient";
+
+export type Lang = "fr" | "en";
 
 export default function PublicFormShell({
   form,
@@ -14,51 +15,36 @@ export default function PublicFormShell({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const sp = useSearchParams();
+  const searchParams = useSearchParams();
 
-  // lang pilotée par l'URL (?lang=fr|en)
-  const urlLang = (sp.get("lang") === "en" ? "en" : "fr") as Lang;
-  const [lang, setLang] = useState<Lang>(urlLang ?? serverLang);
+  // État local de langue (ne dépend QUE de serverLang au monté)
+  const [lang, setLang] = useState<Lang>(serverLang);
 
-  // garde l’URL en phase avec l’état
+  // Synchronisation d’URL SANS BOUCLE :
+  // - dépend SEULEMENT de `lang`
+  // - on ne remplace l’URL que si la valeur actuelle est différente
   useEffect(() => {
-    const current = sp.get("lang") === "en" ? "en" : "fr";
+    const current = searchParams.get("lang") === "en" ? "en" : "fr";
     if (current !== lang) {
-      const p = new URLSearchParams(sp);
-      p.set("lang", lang);
-      router.replace(`${pathname}?${p.toString()}`);
+      const sp = new URLSearchParams(searchParams.toString());
+      sp.set("lang", lang);
+      router.replace(`${pathname}?${sp.toString()}`, { scroll: false });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lang]);
+  }, [lang]); // 👈 surtout pas `searchParams` ici
 
-  // si l’utilisateur change l’URL manuellement, on reflète
-  useEffect(() => {
-    const current = sp.get("lang") === "en" ? "en" : "fr";
-    if (current !== lang) setLang(current as Lang);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sp]);
-
-  const headerLine = useMemo(() => {
-    const d = form?.sessionDate ? new Date(form.sessionDate).toLocaleDateString() : "";
-    if (lang === "en") {
-      return `Trainer: ${form?.trainerName ?? ""} • Date: ${d} • Location: ${form?.location ?? ""}`;
-    }
-    return `Formateur : ${form?.trainerName ?? ""} • Date : ${d} • Lieu : ${form?.location ?? ""}`;
-  }, [form, lang]);
+  // Mémoisation des libellés si tu en as besoin (optionnel)
+  const effectiveLang = useMemo<Lang>(() => lang, [lang]);
 
   return (
-    <div className="max-w-3xl mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">
-            {lang === "en" ? form?.title ?? "Training evaluation" : form?.title ?? "Évaluation de formation"}
-          </h1>
-          <p className="text-sm text-neutral-600">{headerLine}</p>
-        </div>
-        <LanguageToggle value={lang} onChange={setLang} />
-      </div>
-
-      <FormClient form={form} lang={lang} />
+    <div>
+      {/* Si tu as un toggle de langue sur le public form, branche-le ici.
+          Exemple:
+          <button onClick={() => setLang(effectiveLang === "fr" ? "en" : "fr")}>
+            {effectiveLang === "fr" ? "🇬🇧 English" : "🇫🇷 Français"}
+          </button>
+      */}
+      <FormClient form={form} lang={effectiveLang} />
     </div>
   );
 }
