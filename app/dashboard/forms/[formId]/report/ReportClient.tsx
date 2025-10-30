@@ -1,4 +1,3 @@
-// app/dashboard/forms/[formId]/report/report/ReportClient.tsx
 "use client";
 
 import Link from "next/link";
@@ -6,15 +5,15 @@ import { useMemo } from "react";
 
 type Lang = "fr" | "en";
 
-type Form = {
+type FormMeta = {
   id: string;
   title: string | null;
-  slug: string;
   trainerName: string | null;
-  location: string | null;
   sessionDate: string | null; // ISO
-  createdAt: string | null;   // ISO
-  isOpen: boolean;
+  location: string | null;
+  slug: string | null;
+  createdAt?: string | null;
+  isOpen?: boolean;
 };
 
 type Resp = {
@@ -51,263 +50,320 @@ type Resp = {
   consentementTemoignage: boolean | null;
 };
 
+function fmtDate(iso: string | null) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? "" : d.toLocaleDateString();
+}
+
+const CONTENT_ROWS = [
+  ["contAttentes", "Le contenu couvre-t-il vos attentes ?"],
+  ["contUtiliteTravail", "Le contenu est-il utile pour votre travail ?"],
+  ["contExercices", "Exercices / exemples / vidéos"],
+  ["contMethodologie", "Méthodologie utilisée"],
+  ["contSupports", "Supports de formation"],
+  ["contRythme", "Rythme de la formation"],
+  ["contGlobal", "Évaluation globale de la formation"],
+] as const;
+
+const TRAINER_ROWS = [
+  ["formMaitrise", "Maîtrise du sujet"],
+  ["formCommunication", "Qualité de communication"],
+  ["formClarte", "Clarté des réponses aux questions"],
+  ["formMethodo", "Maîtrise de la méthodologie"],
+  ["formGlobal", "Évaluation globale du formateur"],
+] as const;
+
 export default function ReportClient({
-  lang,
   form,
   responses,
+  lang = "fr",
 }: {
-  lang: Lang;
-  form: Form;
+  form: FormMeta;
   responses: Resp[];
+  lang?: Lang;
 }) {
   const T = useMemo(() => {
     if (lang === "en") {
       return {
-        back: "← Back to dashboard",
-        title: "Report",
-        meta: "Session info",
-        trainer: "Trainer",
-        date: "Date",
-        place: "Location",
-        status: "Status",
-        open: "Open",
-        closed: "Closed",
-        stats: "Key figures",
-        nbResp: "Responses",
-        avgContent: "Avg. training content (global)",
-        avgTrainer: "Avg. trainer (global)",
-        contentChart: "CONTENT CHART (1–5)",
-        trainerChart: "TRAINER CHART (1–5)",
-        pieTitle: "Did the training meet expectations?",
-        yes: "YES",
-        partly: "PARTLY",
-        no: "NO",
-        wishTitle: "Suggested complementary trainings",
-        none: "No data.",
-        export: "Export Excel",
-        fr: "French (FR)",
-        en: "English (EN)",
-        publicLinks: "Public form links",
-        frenchForm: "French form",
-        englishForm: "English form",
+        back: "Back to dashboard",
+        title: "Training report",
+        metaTrainer: "Trainer",
+        metaDate: "Date",
+        metaLocation: "Location",
+        kpis: {
+          total: "Total responses",
+          avgContent: "Avg. — training content",
+          avgTrainer: "Avg. — trainer",
+          meet: "Did it meet expectations?",
+          yes: "YES",
+          partly: "PARTLY",
+          no: "NO",
+        },
+        sections: {
+          content: "Charts — Training content",
+          trainer: "Charts — Trainer",
+          wishes: "Desired complementary trainings",
+          testimonials: "Testimonials (consented)",
+        },
+        scale: "Scale 1–4",
+        average: "Average",
+        distribution: "Distribution (1→4)",
+        none: "No data",
       };
     }
     return {
-      back: "← Retour au tableau de bord",
-      title: "Rapport",
-      meta: "Infos de session",
-      trainer: "Formateur",
-      date: "Date",
-      place: "Lieu",
-      status: "Statut",
-      open: "Ouvert",
-      closed: "Fermé",
-      stats: "Chiffres clés",
-      nbResp: "Réponses",
-      avgContent: "Moy. contenu (global)",
-      avgTrainer: "Moy. formateur (global)",
-      contentChart: "GRAPHIQUE CONTENU (1–5)",
-      trainerChart: "GRAPHIQUE FORMATEUR (1–5)",
-      pieTitle: "La formation a-t-elle répondu aux attentes ?",
-      yes: "OUI",
-      partly: "PARTIELLEMENT",
-      no: "NON",
-      wishTitle: "Formations complémentaires proposées",
-      none: "Aucune donnée.",
-      export: "Export Excel",
-      fr: "Français (FR)",
-      en: "Anglais (EN)",
-      publicLinks: "Liens publics du formulaire",
-      frenchForm: "Formulaire français",
-      englishForm: "Formulaire anglais",
+      back: "Retour au tableau de bord",
+      title: "Rapport de formation",
+      metaTrainer: "Formateur",
+      metaDate: "Date",
+      metaLocation: "Lieu",
+      kpis: {
+        total: "Total réponses",
+        avgContent: "Moy. — contenu",
+        avgTrainer: "Moy. — formateur",
+        meet: "Répondu aux attentes ?",
+        yes: "OUI",
+        partly: "PARTIELLEMENT",
+        no: "NON",
+      },
+      sections: {
+        content: "Graphiques — Contenu",
+        trainer: "Graphiques — Formateur",
+        wishes: "Formations complémentaires souhaitées",
+        testimonials: "Témoignages (avec consentement)",
+      },
+      scale: "Échelle 1–4",
+      average: "Moyenne",
+      distribution: "Répartition (1→4)",
+      none: "Aucune donnée",
     };
   }, [lang]);
 
-  const nb = responses.length;
+  /* --------------------- calculs ---------------------- */
+  const scale = [1, 2, 3, 4];
+  const threshold = 3; // Seuil de satisfaction
 
-  const avg = (nums: (number | null | undefined)[]) => {
-    const vals = nums.filter((x): x is number => typeof x === "number");
-    if (!vals.length) return 0;
-    return Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 100) / 100;
+  const avg = (arr: Array<number | null | undefined>) => {
+    const nums = arr.filter((v): v is number => typeof v === "number" && v >= 1 && v <= 4);
+    if (!nums.length) return null;
+    const s = nums.reduce((a, b) => a + b, 0);
+    return +(s / nums.length).toFixed(2);
   };
 
-  const avgContent = avg(responses.map((r) => r.contGlobal));
-  const avgTrainer = avg(responses.map((r) => r.formGlobal));
+  const dist = (arr: Array<number | null | undefined>) => {
+    const d: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    arr.forEach((v) => {
+      if (typeof v === "number" && v >= 1 && v <= 4) d[v]++;
+    });
+    return d;
+  };
 
-  // Barres CONTENU 1..5
-  const contentRows = [
-    { key: "contAttentes", label: lang === "fr" ? "Attentes" : "Expectations", v: avg(responses.map(r => r.contAttentes)) },
-    { key: "contUtiliteTravail", label: lang === "fr" ? "Utilité travail" : "Usefulness for work", v: avg(responses.map(r => r.contUtiliteTravail)) },
-    { key: "contExercices", label: lang === "fr" ? "Exercices / ex." : "Exercises / examples", v: avg(responses.map(r => r.contExercices)) },
-    { key: "contMethodologie", label: lang === "fr" ? "Méthodologie" : "Methodology", v: avg(responses.map(r => r.contMethodologie)) },
-    { key: "contSupports", label: lang === "fr" ? "Supports" : "Materials", v: avg(responses.map(r => r.contSupports)) },
-    { key: "contRythme", label: lang === "fr" ? "Rythme" : "Pace", v: avg(responses.map(r => r.contRythme)) },
-    { key: "contGlobal", label: lang === "fr" ? "Global contenu" : "Content overall", v: avg(responses.map(r => r.contGlobal)) },
-  ];
+  const pick = (key: keyof Resp) => responses.map((r) => r[key]) as Array<number | null | undefined>;
 
-  // Barres FORMATEUR 1..5
-  const trainerRows = [
-    { key: "formMaitrise", label: lang === "fr" ? "Maîtrise" : "Mastery", v: avg(responses.map(r => r.formMaitrise)) },
-    { key: "formCommunication", label: lang === "fr" ? "Communication" : "Communication", v: avg(responses.map(r => r.formCommunication)) },
-    { key: "formClarte", label: lang === "fr" ? "Clarté" : "Clarity", v: avg(responses.map(r => r.formClarte)) },
-    { key: "formMethodo", label: lang === "fr" ? "Méthodo" : "Methodology", v: avg(responses.map(r => r.formMethodo)) },
-    { key: "formGlobal", label: lang === "fr" ? "Global formateur" : "Trainer overall", v: avg(responses.map(r => r.formGlobal)) },
-  ];
+  const kpiAvgContent = avg(CONTENT_ROWS.map(([k]) => avg(pick(k as keyof Resp)) ?? 0));
+  const kpiAvgTrainer = avg(TRAINER_ROWS.map(([k]) => avg(pick(k as keyof Resp)) ?? 0));
 
-  // Camembert attentes
-  const cYes = responses.filter(r => r.reponduAttentes === "OUI").length;
-  const cPart = responses.filter(r => r.reponduAttentes === "PARTIELLEMENT").length;
-  const cNo = responses.filter(r => r.reponduAttentes === "NON").length;
-  const totalPie = cYes + cPart + cNo || 1;
-  const pYes = (cYes / totalPie) * 100;
-  const pPart = (cPart / totalPie) * 100;
-  const pNo = 100 - pYes - pPart;
+  const meetYes = responses.filter((r) => r.reponduAttentes === "OUI").length;
+  const meetPart = responses.filter((r) => r.reponduAttentes === "PARTIELLEMENT").length;
+  const meetNo = responses.filter((r) => r.reponduAttentes === "NON").length;
+  const meetTotal = Math.max(1, meetYes + meetPart + meetNo);
 
-  // Liste formations complémentaires non vides (dé-dupliquée)
-  const wishes = Array.from(
-    new Set(
-      responses
-        .map((r) => (r.formationsComplementaires || "").trim())
-        .filter((s) => s.length > 0)
-    )
-  );
+  const wishes = responses
+    .map((r) => (r.formationsComplementaires || "").trim())
+    .filter((s) => !!s.length);
 
-  // URLs publiques + export
-  const base =
-    typeof window !== "undefined"
-      ? window.location.origin
-      : process.env.NEXT_PUBLIC_BASE_URL?.startsWith("http")
-      ? process.env.NEXT_PUBLIC_BASE_URL!
-      : process.env.NEXT_PUBLIC_BASE_URL
-      ? `https://${process.env.NEXT_PUBLIC_BASE_URL}`
-      : "";
-
-  const frUrl = `${base}/f/${form.slug}?lang=fr`;
-  const enUrl = `${base}/f/${form.slug}?lang=en`;
-  const exportFr = `/api/forms/${form.id}/export?lang=fr`;
-  const exportEn = `/api/forms/${form.id}/export?lang=en`;
+  const testimonials = responses
+    .filter((r) => r.consentementTemoignage && (r.temoignage || "").trim().length)
+    .map((r) => ({
+      nom: [r.participantPrenoms, r.participantNom].filter(Boolean).join(" "),
+      texte: (r.temoignage || "").trim(),
+    }));
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-8">
-      <header className="flex items-center justify-between">
-        <div>
-          <Link href="/dashboard" className="text-sm underline">
-            {T.back}
-          </Link>
-          <h1 className="text-2xl font-bold mt-2">{T.title} — {form.title}</h1>
-          <p className="text-sm text-neutral-600">{T.meta} · {T.trainer}: {form.trainerName || "—"} · {T.date}: {form.sessionDate ? new Date(form.sessionDate).toLocaleDateString() : "—"} · {T.place}: {form.location || "—"} · {T.status}: {form.isOpen ? T.open : T.closed}</p>
+    <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold">
+            {T.title} — {form.title ?? ""}
+          </h1>
+          <p className="text-sm text-neutral-600">
+            {T.metaTrainer}: {form.trainerName ?? "-"} • {T.metaDate}: {fmtDate(form.sessionDate)} • {T.metaLocation}: {form.location ?? "-"}
+          </p>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <a href={exportFr} className="px-3 py-1.5 rounded-xl bg-black text-white text-sm">{T.export} — {T.fr}</a>
-          <a href={exportEn} className="px-3 py-1.5 rounded-xl border text-sm">{T.export} — {T.en}</a>
-          <div className="text-xs text-right">
-            <div className="opacity-60">{T.publicLinks}:</div>
-            <a className="underline block" href={frUrl} target="_blank" rel="noreferrer">• {T.frenchForm}</a>
-            <a className="underline block" href={enUrl} target="_blank" rel="noreferrer">• {T.englishForm}</a>
+        <Link href="/dashboard" className="rounded-xl border px-4 py-2 text-sm hover:bg-neutral-50">
+          ← {T.back}
+        </Link>
+      </div>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <KPI label={T.kpis.total} value={responses.length.toString()} />
+        <KPI
+          label={T.kpis.avgContent}
+          value={kpiAvgContent?.toString() ?? "—"}
+          good={!!kpiAvgContent && kpiAvgContent >= threshold}
+        />
+        <KPI
+          label={T.kpis.avgTrainer}
+          value={kpiAvgTrainer?.toString() ?? "—"}
+          good={!!kpiAvgTrainer && kpiAvgTrainer >= threshold}
+        />
+        <div className="rounded-2xl border p-4">
+          <div className="text-sm text-neutral-600">{T.kpis.meet}</div>
+          <div className="mt-2 space-y-1 text-sm">
+            <Bar label={T.kpis.yes} value={Math.round((meetYes / meetTotal) * 100)} />
+            <Bar label={T.kpis.partly} value={Math.round((meetPart / meetTotal) * 100)} />
+            <Bar label={T.kpis.no} value={Math.round((meetNo / meetTotal) * 100)} />
           </div>
         </div>
-      </header>
+      </div>
 
-      {/* CHIFFRES CLÉS */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card title={T.nbResp} value={String(nb)} />
-        <Card title={T.avgContent} value={avgContent ? String(avgContent) : "—"} />
-        <Card title={T.avgTrainer} value={avgTrainer ? String(avgTrainer) : "—"} />
-      </section>
+      {/* Contenu */}
+      <Section title={T.sections.content}>
+        <Table rows={CONTENT_ROWS} pick={pick} avg={avg} dist={dist} scale={scale} total={responses.length} />
+      </Section>
 
-      {/* GRAPHIQUE CONTENU */}
-      <ChartBlock title={T.contentChart} rows={contentRows} />
+      {/* Formateur */}
+      <Section title={T.sections.trainer}>
+        <Table rows={TRAINER_ROWS} pick={pick} avg={avg} dist={dist} scale={scale} total={responses.length} />
+      </Section>
 
-      {/* GRAPHIQUE FORMATEUR */}
-      <ChartBlock title={T.trainerChart} rows={trainerRows} />
-
-      {/* CAMEMBERT */}
-      <section className="p-4 border rounded-2xl bg-white shadow space-y-4">
-        <h2 className="font-semibold">{T.pieTitle}</h2>
-        <div className="flex items-center gap-8 flex-wrap">
-          <div
-            className="w-40 h-40 rounded-full"
-            style={{
-              background: `conic-gradient(#16a34a 0 ${pYes}%, #f59e0b ${pYes}% ${pYes + pPart}%, #ef4444 ${pYes + pPart}% 100%)`,
-            }}
-            title={`YES/OUI ${pYes.toFixed(0)}% • PART ${pPart.toFixed(0)}% • NO/NON ${pNo.toFixed(0)}%`}
-          />
-          <ul className="text-sm space-y-1">
-            <li><span className="inline-block w-3 h-3 bg-[#16a34a] mr-2 rounded"></span>{T.yes}: {cYes}</li>
-            <li><span className="inline-block w-3 h-3 bg-[#f59e0b] mr-2 rounded"></span>{T.partly}: {cPart}</li>
-            <li><span className="inline-block w-3 h-3 bg-[#ef4444] mr-2 rounded"></span>{T.no}: {cNo}</li>
-          </ul>
-        </div>
-      </section>
-
-      {/* FORMATIONS COMPLÉMENTAIRES */}
-      <section className="p-4 border rounded-2xl bg-white shadow space-y-4">
-        <h2 className="font-semibold">{T.wishTitle}</h2>
+      {/* Formations complémentaires */}
+      <Section title={T.sections.wishes}>
         {wishes.length === 0 ? (
-          <p className="text-sm opacity-70">{T.none}</p>
+          <div className="text-sm text-neutral-600">{T.none}</div>
         ) : (
-          <div className="overflow-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left text-neutral-500">
-                  <th className="py-2 pr-4">#</th>
-                  <th className="py-2">Intitulé</th>
-                </tr>
-              </thead>
-              <tbody>
-                {wishes.map((w, i) => (
-                  <tr key={i} className="border-t">
-                    <td className="py-2 pr-4">{i + 1}</td>
-                    <td className="py-2">{w}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <ul className="list-disc pl-6 space-y-1 text-sm">
+            {wishes.map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      {/* Témoignages */}
+      <Section title={T.sections.testimonials}>
+        {testimonials.length === 0 ? (
+          <div className="text-sm text-neutral-600">{T.none}</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {testimonials.map((t, i) => (
+              <blockquote key={i} className="rounded-2xl border p-4 bg-white">
+                <p className="text-sm leading-relaxed">“{t.texte}”</p>
+                <div className="mt-2 text-xs text-neutral-600">— {t.nom || "Anonyme"}</div>
+              </blockquote>
+            ))}
           </div>
         )}
-      </section>
+      </Section>
     </div>
   );
 }
 
-/* --------- UI petites briques --------- */
-function Card({ title, value }: { title: string; value: string }) {
+/* ------------------- Composants UI ------------------- */
+
+function KPI({ label, value, good }: { label: string; value: string; good?: boolean }) {
   return (
-    <div className="p-4 border rounded-2xl bg-white shadow">
-      <div className="text-sm text-neutral-500">{title}</div>
-      <div className="text-2xl font-bold">{value}</div>
+    <div
+      className={`rounded-2xl border p-4 ${
+        good === undefined ? "" : good ? "bg-green-50 border-green-300" : "bg-red-50 border-red-300"
+      }`}
+    >
+      <div className="text-sm text-neutral-600">{label}</div>
+      <div className="text-2xl font-semibold mt-1">{value}</div>
     </div>
   );
 }
 
-function ChartBlock({
-  title,
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-2xl border p-4 bg-white">
+      <h2 className="text-lg font-semibold mb-3">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+function Bar({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-28">{label}</div>
+      <div className="flex-1 h-2 rounded-full bg-neutral-200 overflow-hidden">
+        <div className="h-2 rounded-full bg-black" style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
+      </div>
+      <div className="w-10 text-right">{value}%</div>
+    </div>
+  );
+}
+
+function Table({
   rows,
+  pick,
+  avg,
+  dist,
+  scale,
+  total,
 }: {
-  title: string;
-  rows: { label: string; v: number }[];
+  rows: readonly (readonly [string, string])[];
+  pick: (k: any) => (number | null | undefined)[];
+  avg: (arr: Array<number | null | undefined>) => number | null;
+  dist: (arr: Array<number | null | undefined>) => Record<number, number>;
+  scale: number[];
+  total: number;
 }) {
-  // Les barres sont proportionnelles à /5 (abscisse 1..5)
   return (
-    <section className="p-4 border rounded-2xl bg-white shadow space-y-3">
-      <h2 className="font-semibold">{title}</h2>
-      <div className="space-y-2">
-        {rows.map((r) => (
-          <div key={r.label} className="grid grid-cols-12 items-center gap-3">
-            <div className="col-span-3 text-sm text-neutral-700">{r.label}</div>
-            <div className="col-span-8 bg-neutral-100 rounded-full h-3 overflow-hidden">
-              <div
-                className="h-3 bg-black"
-                style={{ width: `${Math.max(0, Math.min(100, (r.v / 5) * 100))}%` }}
-                title={String(r.v || 0)}
-              />
-            </div>
-            <div className="col-span-1 text-right text-sm tabular-nums">
-              {r.v ? r.v.toFixed(2) : "—"}
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="text-left text-neutral-600">
+          <th className="py-2">Question</th>
+          <th className="py-2 w-24">Moyenne</th>
+          <th className="py-2">Répartition (1→4)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map(([key, label]) => {
+          const values = pick(key);
+          const a = avg(values);
+          const d = dist(values);
+          return (
+            <tr key={key} className="border-t">
+              <td className="py-2 pr-4">{label}</td>
+              <td className={`py-2 font-medium ${a && a >= 3 ? "text-green-700" : "text-red-600"}`}>{a ?? "—"}</td>
+              <td className="py-2">
+                <Distrib scale={scale} dist={d} total={total} />
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+function Distrib({
+  scale,
+  dist,
+  total,
+}: {
+  scale: number[];
+  dist: Record<number, number>;
+  total: number;
+}) {
+  const t = Math.max(1, total);
+  return (
+    <div className="flex items-center gap-2">
+      {scale.map((s) => {
+        const pct = Math.round(((dist[s] || 0) / t) * 100);
+        return (
+          <div key={s} className="flex items-center gap-1">
+            <span className="inline-block w-4 text-xs text-neutral-600 text-right">{s}</span>
+            <div className="h-2 w-12 rounded bg-neutral-200 overflow-hidden">
+              <div className="h-2 bg-black" style={{ width: `${pct}%` }} />
             </div>
           </div>
-        ))}
-      </div>
-    </section>
+        );
+      })}
+    </div>
   );
 }
