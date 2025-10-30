@@ -2,6 +2,14 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  Legend,
+} from "recharts";
 
 type Lang = "fr" | "en";
 
@@ -74,6 +82,10 @@ const TRAINER_ROWS = [
   ["formGlobal", "Évaluation globale du formateur"],
 ] as const;
 
+// Palette simple (tu peux ajuster si tu veux)
+const COLORS = ["#111827", "#6B7280", "#A3A3A3", "#D4D4D4"]; // noir → gris clair
+const COLORS_YPN = ["#16A34A", "#F59E0B", "#DC2626"]; // OUI (vert), PARTIEL (orange), NON (rouge)
+
 export default function ReportClient({
   form,
   responses,
@@ -103,6 +115,7 @@ export default function ReportClient({
         sections: {
           content: "Charts — Training content",
           trainer: "Charts — Trainer",
+          pies: "Pie charts — Distributions",
           wishes: "Desired complementary trainings",
           testimonials: "Testimonials (consented)",
         },
@@ -130,6 +143,7 @@ export default function ReportClient({
       sections: {
         content: "Graphiques — Contenu",
         trainer: "Graphiques — Formateur",
+        pies: "Camemberts — Répartitions",
         wishes: "Formations complémentaires souhaitées",
         testimonials: "Témoignages (avec consentement)",
       },
@@ -161,13 +175,30 @@ export default function ReportClient({
 
   const pick = (key: keyof Resp) => responses.map((r) => r[key]) as Array<number | null | undefined>;
 
+  // KPIs (moyenne des moyennes par section)
   const kpiAvgContent = avg(CONTENT_ROWS.map(([k]) => avg(pick(k as keyof Resp)) ?? 0));
   const kpiAvgTrainer = avg(TRAINER_ROWS.map(([k]) => avg(pick(k as keyof Resp)) ?? 0));
 
+  // Expectations (Y/P/N)
   const meetYes = responses.filter((r) => r.reponduAttentes === "OUI").length;
   const meetPart = responses.filter((r) => r.reponduAttentes === "PARTIELLEMENT").length;
   const meetNo = responses.filter((r) => r.reponduAttentes === "NON").length;
   const meetTotal = Math.max(1, meetYes + meetPart + meetNo);
+
+  // Distributions agrégées pour camemberts
+  const allContentValues = CONTENT_ROWS.flatMap(([k]) => pick(k as keyof Resp));
+  const allTrainerValues = TRAINER_ROWS.flatMap(([k]) => pick(k as keyof Resp));
+
+  const distContent = dist(allContentValues);
+  const distTrainer = dist(allTrainerValues);
+
+  const pieDataContent = scale.map((n) => ({ name: String(n), value: distContent[n] || 0 }));
+  const pieDataTrainer = scale.map((n) => ({ name: String(n), value: distTrainer[n] || 0 }));
+  const pieDataYPN = [
+    { name: T.kpis.yes, value: meetYes },
+    { name: T.kpis.partly, value: meetPart },
+    { name: T.kpis.no, value: meetNo },
+  ];
 
   const wishes = responses
     .map((r) => (r.formationsComplementaires || "").trim())
@@ -218,6 +249,53 @@ export default function ReportClient({
           </div>
         </div>
       </div>
+
+      {/* Camemberts */}
+      <Section title={T.sections.pies}>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <PieCard title={`${T.kpis.meet}`}>
+            <ResponsiveContainer width="100%" height={260}>
+              <PieChart>
+                <Pie data={pieDataYPN} dataKey="value" nameKey="name" innerRadius={60} outerRadius={100}>
+                  {pieDataYPN.map((_, i) => (
+                    <Cell key={i} fill={COLORS_YPN[i % COLORS_YPN.length]} />
+                  ))}
+                </Pie>
+                <Legend />
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </PieCard>
+
+          <PieCard title="Contenu 1→4">
+            <ResponsiveContainer width="100%" height={260}>
+              <PieChart>
+                <Pie data={pieDataContent} dataKey="value" nameKey="name" innerRadius={60} outerRadius={100}>
+                  {pieDataContent.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Legend />
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </PieCard>
+
+          <PieCard title="Formateur 1→4">
+            <ResponsiveContainer width="100%" height={260}>
+              <PieChart>
+                <Pie data={pieDataTrainer} dataKey="value" nameKey="name" innerRadius={60} outerRadius={100}>
+                  {pieDataTrainer.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Legend />
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </PieCard>
+        </div>
+      </Section>
 
       {/* Contenu */}
       <Section title={T.sections.content}>
@@ -364,6 +442,15 @@ function Distrib({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function PieCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border p-4 bg-white">
+      <div className="text-sm font-medium mb-2">{title}</div>
+      {children}
     </div>
   );
 }
