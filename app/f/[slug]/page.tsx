@@ -1,7 +1,7 @@
 // app/f/[slug]/page.tsx
 import { PrismaClient } from "@prisma/client";
 import { notFound } from "next/navigation";
-import PublicFormShell from "@/app/components/PublicFormShell";
+import PublicFormShell from "../../components/PublicFormShell";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
