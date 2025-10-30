@@ -29,4 +29,15 @@
     "prisma": "^5.17.0",
     "typescript": "^5.4.5"
   }
+  
+}
+{
+  "dependencies": {
+    "@prisma/client": "5.22.0",
+    "next": "14.2.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "recharts": "^2.12.7",
+    "zod": "^3.23.8"
+  },
 }
