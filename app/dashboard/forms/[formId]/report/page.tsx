@@ -1,27 +1,29 @@
 // app/dashboard/forms/[formId]/report/page.tsx
 import { PrismaClient } from "@prisma/client";
-import ReportClient from "./report/ReportClient";
+import ReportClient from "./ReportClient";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const prisma = new PrismaClient();
 
-type Params = { params: { formId: string }; searchParams?: { lang?: string } };
+type PageProps = {
+  params: { formId: string };
+  searchParams?: { lang?: string };
+};
 
-export default async function ReportPage({ params, searchParams }: Params) {
-  const { formId } = params;
+export default async function ReportPage({ params, searchParams }: PageProps) {
   const lang = (searchParams?.lang === "en" ? "en" : "fr") as "fr" | "en";
 
   const form = await prisma.form.findUnique({
-    where: { id: formId },
+    where: { id: params.formId },
     select: {
       id: true,
       title: true,
-      slug: true,
       trainerName: true,
-      location: true,
       sessionDate: true,
+      location: true,
+      slug: true,
       createdAt: true,
       isOpen: true,
     },
@@ -31,16 +33,13 @@ export default async function ReportPage({ params, searchParams }: Params) {
     return (
       <div className="max-w-5xl mx-auto p-8">
         <h1 className="text-2xl font-bold">404</h1>
-        <p className="text-sm opacity-70">
-          {lang === "fr" ? "Formulaire introuvable." : "Form not found."}
-        </p>
+        <p className="text-neutral-600 mt-2">Formulaire introuvable.</p>
       </div>
     );
   }
 
-  // On sélectionne seulement les colonnes utilisées par le rapport
   const responses = await prisma.response.findMany({
-    where: { formId },
+    where: { formId: form.id },
     orderBy: { submittedAt: "asc" },
     select: {
       id: true,
@@ -49,12 +48,10 @@ export default async function ReportPage({ params, searchParams }: Params) {
       participantPrenoms: true,
       participantFonction: true,
       participantEntreprise: true,
-
       envAccueil: true,
       envLieu: true,
       envMateriel: true,
       envAmeliorations: true,
-
       contAttentes: true,
       contUtiliteTravail: true,
       contExercices: true,
@@ -62,13 +59,11 @@ export default async function ReportPage({ params, searchParams }: Params) {
       contSupports: true,
       contRythme: true,
       contGlobal: true,
-
       formMaitrise: true,
       formCommunication: true,
       formClarte: true,
       formMethodo: true,
       formGlobal: true,
-
       reponduAttentes: true,
       formationsComplementaires: true,
       temoignage: true,
@@ -76,23 +71,15 @@ export default async function ReportPage({ params, searchParams }: Params) {
     },
   });
 
-  // Sérialisation sûre pour le client (Dates -> ISO string)
-  const formSerialized = {
+  const safeForm = {
     ...form,
-    sessionDate: form.sessionDate ? form.sessionDate.toISOString() : null,
-    createdAt: form.createdAt ? form.createdAt.toISOString() : null,
+    createdAt: form.createdAt?.toISOString() ?? null,
+    sessionDate: form.sessionDate ? new Date(form.sessionDate).toISOString() : null,
   };
-
-  const responsesSerialized = responses.map((r) => ({
+  const safeResponses = responses.map((r) => ({
     ...r,
-    submittedAt: r.submittedAt ? r.submittedAt.toISOString() : null,
+    submittedAt: r.submittedAt?.toISOString() ?? null,
   }));
 
-  return (
-    <ReportClient
-      lang={lang}
-      form={formSerialized}
-      responses={responsesSerialized}
-    />
-  );
+  return <ReportClient form={safeForm} responses={safeResponses} lang={lang} />;
 }
