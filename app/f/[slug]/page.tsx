@@ -1,9 +1,14 @@
 import { PrismaClient } from "@prisma/client";
 import { notFound } from "next/navigation";
-import PublicFormShell from "../../components/PublicFormShell";
+import dynamic from "next/dynamic";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+const prisma = new PrismaClient();
+
+// On charge le wrapper côté client pour éviter tout effet serveur qui remonterait le composant.
+const PublicFormShell = dynamic(() => import("../../components/PublicFormShell"), { ssr: false });
 
 export default async function PublicFormPage({
   params,
@@ -12,11 +17,10 @@ export default async function PublicFormPage({
   params: { slug: string };
   searchParams?: { lang?: string; debug?: string };
 }) {
-  const prisma = new PrismaClient();
   const form = await prisma.form.findUnique({ where: { slug: params.slug } });
   if (!form) return notFound();
 
-  const serverLang = (searchParams?.lang === "en" ? "en" : "fr") as "fr" | "en";
+  const serverLang = searchParams?.lang === "en" ? "en" : "fr";
 
   if (searchParams?.debug === "1") {
     return (
