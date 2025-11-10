@@ -36,7 +36,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const url = new URL(req.url);
     const lang = (url.searchParams.get("lang") === "en" ? "en" : "fr") as "fr" | "en";
     const L = LABELS[lang];
-    const seuil = 3; // ✅ Seuil fixe à 3
+    const seuil = 3; // ✅ seuil constant à 3
 
     const form = await prisma.form.findUnique({ where: { id: params.formId } });
     if (!form) return NextResponse.json({ error: "Form not found" }, { status: 404 });
@@ -87,7 +87,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     };
     const white = { argb: "FFFFFFFF" };
 
-    // =============== FEUILLE 1 — SYNTHÈSE ===============
+    // ================= FEUILLE 1 — SYNTHÈSE =================
     const ws1 = wb.addWorksheet(L.sheet1Title);
     ws1.properties.defaultRowHeight = 18;
 
@@ -144,7 +144,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     makeHeader("Formateur(s)");
     writeBlock(formRows);
 
-    // =============== FEUILLE 2 — GRAPHIQUE CONTENU ===============
+    // ================= FEUILLE 2 — GRAPHIQUE CONTENU =================
     const ws2 = wb.addWorksheet(L.sheet2Title);
     ws2.getColumn(1).width = 160;
 
@@ -187,13 +187,13 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     if (img1Resp.ok) {
       const ab = await img1Resp.arrayBuffer();
       const imgId = wb.addImage({
-        buffer: new Uint8Array(bufFrom(ab)), // ✅ Correction Node 22
+        buffer: Buffer.from(new Uint8Array(bufFrom(ab)).buffer), // ✅ Correction Render + Node 22
         extension: "png",
       });
       ws2.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
     }
 
-    // =============== FEUILLE 3 — GRAPHIQUE FORMATEUR ===============
+    // ================= FEUILLE 3 — GRAPHIQUE FORMATEUR =================
     const ws3 = wb.addWorksheet(L.sheet3Title);
     ws3.getColumn(1).width = 160;
 
@@ -236,13 +236,13 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     if (img2Resp.ok) {
       const ab = await img2Resp.arrayBuffer();
       const imgId = wb.addImage({
-        buffer: new Uint8Array(bufFrom(ab)), // ✅ Correction Node 22
+        buffer: Buffer.from(new Uint8Array(bufFrom(ab)).buffer), // ✅ Correction Render + Node 22
         extension: "png",
       });
       ws3.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
     }
 
-    // =============== FEUILLE 4 — CAMEMBERT ATTENTES ===============
+    // ================= FEUILLE 4 — CAMEMBERT ATTENTES =================
     const ws4 = wb.addWorksheet(L.sheet4Title);
     const resAtt = participants.map((p) => p.reponduAttentes || "");
     const countOui = resAtt.filter((x) => x === "OUI").length;
@@ -264,13 +264,13 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     if (imgPieResp.ok) {
       const ab = await imgPieResp.arrayBuffer();
       const imgId = wb.addImage({
-        buffer: new Uint8Array(bufFrom(ab)), // ✅ Correction Node 22
+        buffer: Buffer.from(new Uint8Array(bufFrom(ab)).buffer), // ✅ Correction Render + Node 22
         extension: "png",
       });
       ws4.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 800, height: 480 } });
     }
 
-    // =============== EXPORT FINAL ===============
+    // ================= EXPORT FINAL =================
     const xbuf = await wb.xlsx.writeBuffer();
     const filename = `${(form.title || "evaluation").replace(/[^\p{L}\p{N}\-_ ]/gu, "").slice(0, 60)}_${lang.toUpperCase()}.xlsx`;
 
