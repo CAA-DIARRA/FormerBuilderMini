@@ -46,7 +46,6 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     });
 
     const participants: RespRow[] = raw as RespRow[];
-
     const wb = new ExcelJS.Workbook();
     wb.creator = "FormerBuilder";
     wb.created = new Date();
@@ -176,7 +175,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const img1Resp = await fetch(qcUrl1);
     if (img1Resp.ok) {
       const ab = await img1Resp.arrayBuffer();
-      const imgId = wb.addImage({ buffer: Buffer.from(ab), extension: "png" });
+      const imgId = wb.addImage({ buffer: new Uint8Array(ab), extension: "png" }); // ✅ Fix Node22
       ws2.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
     }
 
@@ -236,7 +235,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const img2Resp = await fetch(qcUrl2);
     if (img2Resp.ok) {
       const ab = await img2Resp.arrayBuffer();
-      const imgId = wb.addImage({ buffer: Buffer.from(ab), extension: "png" });
+      const imgId = wb.addImage({ buffer: new Uint8Array(ab), extension: "png" }); // ✅ Fix Node22
       ws3.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
     }
 
@@ -262,7 +261,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const imgPieResp = await fetch(qcPie);
     if (imgPieResp.ok) {
       const ab = await imgPieResp.arrayBuffer();
-      const imgId = wb.addImage({ buffer: Buffer.from(ab), extension: "png" });
+      const imgId = wb.addImage({ buffer: new Uint8Array(ab), extension: "png" }); // ✅ Fix Node22
       ws4.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 800, height: 480 } });
     }
 
