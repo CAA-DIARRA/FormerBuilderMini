@@ -62,10 +62,9 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     };
     const white = { argb: "FFFFFFFF" };
 
-    // ================== FEUILLE 1 — SYNTHÈSE ==================
+    // ========== FEUILLE 1 — SYNTHÈSE ==========
     const ws1 = wb.addWorksheet(L.sheet1Title);
     ws1.properties.defaultRowHeight = 18;
-
     ws1.addRow([(L as any).reportTitle || "Rapport d’évaluation"]);
     ws1.mergeCells("A1:E1");
     ws1.getCell("A1").font = { bold: true, size: 14 };
@@ -119,7 +118,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     makeHeader("Formateur(s)");
     writeBlock(formRows);
 
-    // ================== FEUILLE 2 — GRAPHIQUE CONTENU ==================
+    // ========== FEUILLE 2 — GRAPHIQUE CONTENU ==========
     const ws2 = wb.addWorksheet(L.sheet2Title);
     ws2.getColumn(1).width = 160;
 
@@ -154,17 +153,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
           title: { display: true, text: L.sheet2Title },
         },
         scales: {
-          x: {
-            suggestedMin: 0,
-            suggestedMax: 5,
-            min: 0,
-            max: 5,
-            beginAtZero: true,
-            ticks: {
-              stepSize: 1,
-              callback: (val: number) => val.toFixed(0),
-            },
-          },
+          x: { min: 0, max: 5, beginAtZero: true, ticks: { stepSize: 1 } },
         },
       },
     };
@@ -175,11 +164,14 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const img1Resp = await fetch(qcUrl1);
     if (img1Resp.ok) {
       const ab = await img1Resp.arrayBuffer();
-      const imgId = wb.addImage({ buffer: new Uint8Array(ab), extension: "png" }); // ✅ Fix Node22
+      const imgId = wb.addImage({
+        buffer: Buffer.from(new Uint8Array(ab)) as any,
+        extension: "png",
+      });
       ws2.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
     }
 
-    // ================== FEUILLE 3 — GRAPHIQUE FORMATEUR ==================
+    // ========== FEUILLE 3 — GRAPHIQUE FORMATEUR ==========
     const ws3 = wb.addWorksheet(L.sheet3Title);
     ws3.getColumn(1).width = 160;
 
@@ -214,17 +206,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
           title: { display: true, text: L.sheet3Title },
         },
         scales: {
-          x: {
-            suggestedMin: 0,
-            suggestedMax: 5,
-            min: 0,
-            max: 5,
-            beginAtZero: true,
-            ticks: {
-              stepSize: 1,
-              callback: (val: number) => val.toFixed(0),
-            },
-          },
+          x: { min: 0, max: 5, beginAtZero: true, ticks: { stepSize: 1 } },
         },
       },
     };
@@ -235,13 +217,17 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const img2Resp = await fetch(qcUrl2);
     if (img2Resp.ok) {
       const ab = await img2Resp.arrayBuffer();
-      const imgId = wb.addImage({ buffer: new Uint8Array(ab), extension: "png" }); // ✅ Fix Node22
+      const imgId = wb.addImage({
+        buffer: Buffer.from(new Uint8Array(ab)) as any,
+        extension: "png",
+      });
       ws3.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
     }
 
-    // ================== FEUILLE 4 — CAMEMBERT ATTENTES ==================
+    // ========== FEUILLE 4 — CAMEMBERT ATTENTES ==========
     const ws4 = wb.addWorksheet(L.sheet4Title);
     ws4.getColumn(1).width = 160;
+
     const resAtt = participants.map((p) => p.reponduAttentes || "");
     const countOui = resAtt.filter((x) => x === "OUI").length;
     const countPartiel = resAtt.filter((x) => x === "PARTIELLEMENT").length;
@@ -261,11 +247,14 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const imgPieResp = await fetch(qcPie);
     if (imgPieResp.ok) {
       const ab = await imgPieResp.arrayBuffer();
-      const imgId = wb.addImage({ buffer: new Uint8Array(ab), extension: "png" }); // ✅ Fix Node22
+      const imgId = wb.addImage({
+        buffer: Buffer.from(new Uint8Array(ab)) as any,
+        extension: "png",
+      });
       ws4.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 800, height: 480 } });
     }
 
-    // ================== EXPORT FINAL ==================
+    // ========== EXPORT ==========
     const xbuf = await wb.xlsx.writeBuffer();
     const filename = `${(form.title || "evaluation")
       .replace(/[^\p{L}\p{N}\-_ ]/gu, "")
