@@ -5,7 +5,6 @@ import ExcelJS from "exceljs";
 import { LABELS } from "../../../../lib/labels";
 
 const prisma = new PrismaClient();
-const bufFrom = (ab: ArrayBuffer) => Buffer.from(new Uint8Array(ab));
 
 type RespRow = {
   participantNom?: string | null;
@@ -36,7 +35,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const url = new URL(req.url);
     const lang = (url.searchParams.get("lang") === "en" ? "en" : "fr") as "fr" | "en";
     const L = LABELS[lang];
-    const seuil = 3; // ✅ Seuil fixe
+    const seuil = 3; // ✅ seuil fixe 3
 
     const form = await prisma.form.findUnique({ where: { id: params.formId } });
     if (!form) return NextResponse.json({ error: "Form not found" }, { status: 404 });
@@ -44,29 +43,6 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const raw = await prisma.response.findMany({
       where: { formId: form.id },
       orderBy: { id: "asc" },
-      select: {
-        participantNom: true,
-        participantPrenoms: true,
-        participantEntreprise: true,
-        envAccueil: true,
-        envLieu: true,
-        envMateriel: true,
-        contAttentes: true,
-        contUtiliteTravail: true,
-        contExercices: true,
-        contMethodologie: true,
-        contSupports: true,
-        contRythme: true,
-        contGlobal: true,
-        formMaitrise: true,
-        formCommunication: true,
-        formClarte: true,
-        formMethodo: true,
-        formGlobal: true,
-        reponduAttentes: true,
-        formationsComplementaires: true,
-        temoignage: true,
-      },
     });
 
     const participants: RespRow[] = raw as RespRow[];
@@ -74,7 +50,6 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     wb.creator = "FormerBuilder";
     wb.created = new Date();
 
-    // === Styles ===
     const grayFill: ExcelJS.FillPattern = {
       type: "pattern",
       pattern: "solid",
@@ -87,7 +62,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     };
     const white = { argb: "FFFFFFFF" };
 
-    // ================= FEUILLE 1 — SYNTHÈSE =================
+    // ================== FEUILLE 1 — SYNTHÈSE ==================
     const ws1 = wb.addWorksheet(L.sheet1Title);
     ws1.properties.defaultRowHeight = 18;
 
@@ -144,7 +119,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     makeHeader("Formateur(s)");
     writeBlock(formRows);
 
-    // ================= FEUILLE 2 — GRAPHIQUE CONTENU =================
+    // ================== FEUILLE 2 — GRAPHIQUE CONTENU ==================
     const ws2 = wb.addWorksheet(L.sheet2Title);
     ws2.getColumn(1).width = 160;
 
@@ -173,7 +148,13 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       options: {
         indexAxis: "y",
         plugins: { legend: { position: "bottom" }, title: { display: true, text: L.sheet2Title } },
-        scales: { x: { min: 0, max: 4 } },
+        scales: {
+          x: {
+            min: 0,
+            max: 5, // ✅ échelle fixe de 0 à 5
+            ticks: { stepSize: 1 }, // ✅ graduations régulières
+          },
+        },
       },
     };
 
@@ -183,11 +164,11 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const img1Resp = await fetch(qcUrl1);
     if (img1Resp.ok) {
       const ab = await img1Resp.arrayBuffer();
-      const imgId = wb.addImage({ buffer: ab, extension: "png" }); // ✅ Compatible Render/Node22
+      const imgId = wb.addImage({ buffer: ab, extension: "png" });
       ws2.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
     }
 
-    // ================= FEUILLE 3 — GRAPHIQUE FORMATEUR =================
+    // ================== FEUILLE 3 — GRAPHIQUE FORMATEUR ==================
     const ws3 = wb.addWorksheet(L.sheet3Title);
     ws3.getColumn(1).width = 160;
 
@@ -216,7 +197,13 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       options: {
         indexAxis: "y",
         plugins: { legend: { position: "bottom" }, title: { display: true, text: L.sheet3Title } },
-        scales: { x: { min: 0, max: 4 } },
+        scales: {
+          x: {
+            min: 0,
+            max: 5, // ✅ borne supérieure 5
+            ticks: { stepSize: 1 },
+          },
+        },
       },
     };
 
@@ -226,12 +213,13 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const img2Resp = await fetch(qcUrl2);
     if (img2Resp.ok) {
       const ab = await img2Resp.arrayBuffer();
-      const imgId = wb.addImage({ buffer: ab, extension: "png" }); // ✅ Compatible Render/Node22
+      const imgId = wb.addImage({ buffer: ab, extension: "png" });
       ws3.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
     }
 
-    // ================= FEUILLE 4 — CAMEMBERT ATTENTES =================
+    // ================== FEUILLE 4 — CAMEMBERT ATTENTES ==================
     const ws4 = wb.addWorksheet(L.sheet4Title);
+    ws4.getColumn(1).width = 160;
     const resAtt = participants.map((p) => p.reponduAttentes || "");
     const countOui = resAtt.filter((x) => x === "OUI").length;
     const countPartiel = resAtt.filter((x) => x === "PARTIELLEMENT").length;
@@ -251,11 +239,11 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const imgPieResp = await fetch(qcPie);
     if (imgPieResp.ok) {
       const ab = await imgPieResp.arrayBuffer();
-      const imgId = wb.addImage({ buffer: ab, extension: "png" }); // ✅ Compatible Render/Node22
+      const imgId = wb.addImage({ buffer: ab, extension: "png" });
       ws4.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 800, height: 480 } });
     }
 
-    // ================= EXPORT FINAL =================
+    // ================== EXPORT FINAL ==================
     const xbuf = await wb.xlsx.writeBuffer();
     const filename = `${(form.title || "evaluation")
       .replace(/[^\p{L}\p{N}\-_ ]/gu, "")
