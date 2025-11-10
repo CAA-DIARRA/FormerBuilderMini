@@ -35,7 +35,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const url = new URL(req.url);
     const lang = (url.searchParams.get("lang") === "en" ? "en" : "fr") as "fr" | "en";
     const L = LABELS[lang];
-    const seuil = 3; // ✅ seuil fixe 3
+    const seuil = 3; // ✅ Seuil fixe
 
     const form = await prisma.form.findUnique({ where: { id: params.formId } });
     if (!form) return NextResponse.json({ error: "Form not found" }, { status: 404 });
@@ -46,6 +46,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     });
 
     const participants: RespRow[] = raw as RespRow[];
+
     const wb = new ExcelJS.Workbook();
     wb.creator = "FormerBuilder";
     wb.created = new Date();
@@ -147,12 +148,23 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       },
       options: {
         indexAxis: "y",
-        plugins: { legend: { position: "bottom" }, title: { display: true, text: L.sheet2Title } },
+        maintainAspectRatio: false,
+        responsive: true,
+        plugins: {
+          legend: { position: "bottom" },
+          title: { display: true, text: L.sheet2Title },
+        },
         scales: {
           x: {
+            suggestedMin: 0,
+            suggestedMax: 5,
             min: 0,
-            max: 5, // ✅ échelle fixe de 0 à 5
-            ticks: { stepSize: 1 }, // ✅ graduations régulières
+            max: 5,
+            beginAtZero: true,
+            ticks: {
+              stepSize: 1,
+              callback: (val: number) => val.toFixed(0),
+            },
           },
         },
       },
@@ -164,7 +176,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const img1Resp = await fetch(qcUrl1);
     if (img1Resp.ok) {
       const ab = await img1Resp.arrayBuffer();
-      const imgId = wb.addImage({ buffer: ab, extension: "png" });
+      const imgId = wb.addImage({ buffer: Buffer.from(ab), extension: "png" });
       ws2.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
     }
 
@@ -196,12 +208,23 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       },
       options: {
         indexAxis: "y",
-        plugins: { legend: { position: "bottom" }, title: { display: true, text: L.sheet3Title } },
+        maintainAspectRatio: false,
+        responsive: true,
+        plugins: {
+          legend: { position: "bottom" },
+          title: { display: true, text: L.sheet3Title },
+        },
         scales: {
           x: {
+            suggestedMin: 0,
+            suggestedMax: 5,
             min: 0,
-            max: 5, // ✅ borne supérieure 5
-            ticks: { stepSize: 1 },
+            max: 5,
+            beginAtZero: true,
+            ticks: {
+              stepSize: 1,
+              callback: (val: number) => val.toFixed(0),
+            },
           },
         },
       },
@@ -213,7 +236,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const img2Resp = await fetch(qcUrl2);
     if (img2Resp.ok) {
       const ab = await img2Resp.arrayBuffer();
-      const imgId = wb.addImage({ buffer: ab, extension: "png" });
+      const imgId = wb.addImage({ buffer: Buffer.from(ab), extension: "png" });
       ws3.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
     }
 
@@ -239,7 +262,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const imgPieResp = await fetch(qcPie);
     if (imgPieResp.ok) {
       const ab = await imgPieResp.arrayBuffer();
-      const imgId = wb.addImage({ buffer: ab, extension: "png" });
+      const imgId = wb.addImage({ buffer: Buffer.from(ab), extension: "png" });
       ws4.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 800, height: 480 } });
     }
 
