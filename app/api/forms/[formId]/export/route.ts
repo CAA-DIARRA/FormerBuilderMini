@@ -5,7 +5,7 @@ import { LABELS } from "../../../../lib/labels";
 
 const prisma = new PrismaClient();
 
-// --- QuickChart via POST (fiable sur Render)
+// --- QuickChart via POST (compatible Render)
 async function fetchChartBase64Post(config: object, width = 1200, height = 550): Promise<string | null> {
   try {
     const resp = await fetch("https://quickchart.io/chart", {
@@ -179,8 +179,26 @@ export async function GET(req: Request, { params }: { params: { formId: string }
           datalabels: { font: { size: 12, weight: "bold" } },
         },
         scales: {
-          x: { min: 0, max: 5, beginAtZero: true, ticks: { stepSize: 1 } },
-          y: { min: 0, max: 5, beginAtZero: true, ticks: { stepSize: 1 } },
+          x: {
+            min: 0,
+            max: 5,
+            suggestedMin: 0,
+            suggestedMax: 5,
+            grace: 0,
+            offset: false,
+            beginAtZero: true,
+            ticks: { stepSize: 1 },
+          },
+          y: {
+            min: 0,
+            max: 5,
+            suggestedMin: 0,
+            suggestedMax: 5,
+            grace: 0,
+            offset: false,
+            beginAtZero: true,
+            ticks: { stepSize: 1 },
+          },
         },
       },
     };
@@ -233,8 +251,26 @@ export async function GET(req: Request, { params }: { params: { formId: string }
           datalabels: { font: { size: 12, weight: "bold" } },
         },
         scales: {
-          x: { min: 0, max: 5, beginAtZero: true, ticks: { stepSize: 1 } },
-          y: { min: 0, max: 5, beginAtZero: true, ticks: { stepSize: 1 } },
+          x: {
+            min: 0,
+            max: 5,
+            suggestedMin: 0,
+            suggestedMax: 5,
+            grace: 0,
+            offset: false,
+            beginAtZero: true,
+            ticks: { stepSize: 1 },
+          },
+          y: {
+            min: 0,
+            max: 5,
+            suggestedMin: 0,
+            suggestedMax: 5,
+            grace: 0,
+            offset: false,
+            beginAtZero: true,
+            ticks: { stepSize: 1 },
+          },
         },
       },
     };
@@ -258,7 +294,12 @@ export async function GET(req: Request, { params }: { params: { formId: string }
         labels: ["OUI", "PARTIELLEMENT", "NON"],
         datasets: [{ data: [countOui, countPartiel, countNon] }],
       },
-      options: { plugins: { legend: { position: "bottom" }, title: { display: true, text: "ATTENTES" } } },
+      options: {
+        plugins: {
+          legend: { position: "bottom" },
+          title: { display: true, text: "ATTENTES" },
+        },
+      },
     };
 
     const base64Pie = await fetchChartBase64Post(pieCfg, 800, 480);
