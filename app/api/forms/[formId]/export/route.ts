@@ -139,11 +139,16 @@ export async function GET(req: Request, { params }: { params: { formId: string }
 
     // === FEUILLE 2 — GRAPHIQUE CONTENU ===
     const ws2 = wb.addWorksheet("GRAPHIQUE CONTENU");
-    const contLabels = contRows.map((r: any) => r.label);
-    const contAvgs = contRows.map((r: any) => {
-      const vals = participants.map((p) => (p[r.key as keyof RespRow] ?? 0) as number);
-      return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-    });
+
+    const contLabels = [...contRows.map((r: any) => r.label), " ", " "];
+    const contAvgs = [
+      ...contRows.map((r: any) => {
+        const vals = participants.map((p) => (p[r.key as keyof RespRow] ?? 0) as number);
+        return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+      }),
+      0,
+      5,
+    ];
 
     const chartCfg1 = {
       type: "bar",
@@ -153,12 +158,15 @@ export async function GET(req: Request, { params }: { params: { formId: string }
           {
             label: "Moyenne",
             data: contAvgs,
-            backgroundColor: "#1A73E8",
+            backgroundColor: contAvgs.map((_, i) =>
+              i >= contAvgs.length - 2 ? "rgba(0,0,0,0)" : "#1A73E8"
+            ),
             datalabels: {
               color: "#000",
               anchor: "end",
               align: "end",
-              formatter: (v: number) => v.toFixed(2),
+              formatter: (v: number, ctx: any) =>
+                ctx.dataIndex >= contAvgs.length - 2 ? "" : v.toFixed(2),
             },
           },
           {
@@ -182,23 +190,11 @@ export async function GET(req: Request, { params }: { params: { formId: string }
           x: {
             min: 0,
             max: 5,
-            suggestedMin: 0,
-            suggestedMax: 5,
-            grace: 0,
-            offset: false,
             beginAtZero: true,
             ticks: { stepSize: 1 },
-          },
-          y: {
-            min: 0,
-            max: 5,
-            suggestedMin: 0,
-            suggestedMax: 5,
             grace: 0,
-            offset: false,
-            beginAtZero: true,
-            ticks: { stepSize: 1 },
           },
+          y: { beginAtZero: true },
         },
       },
     };
@@ -211,11 +207,16 @@ export async function GET(req: Request, { params }: { params: { formId: string }
 
     // === FEUILLE 3 — GRAPHIQUE FORMATEUR ===
     const ws3 = wb.addWorksheet("GRAPHIQUE FORMATEUR");
-    const formLabels = formRows.map((r: any) => r.label);
-    const formAvgs = formRows.map((r: any) => {
-      const vals = participants.map((p) => (p[r.key as keyof RespRow] ?? 0) as number);
-      return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-    });
+
+    const formLabels = [...formRows.map((r: any) => r.label), " ", " "];
+    const formAvgs = [
+      ...formRows.map((r: any) => {
+        const vals = participants.map((p) => (p[r.key as keyof RespRow] ?? 0) as number);
+        return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+      }),
+      0,
+      5,
+    ];
 
     const chartCfg2 = {
       type: "bar",
@@ -225,12 +226,15 @@ export async function GET(req: Request, { params }: { params: { formId: string }
           {
             label: "Moyenne",
             data: formAvgs,
-            backgroundColor: "#1A73E8",
+            backgroundColor: formAvgs.map((_, i) =>
+              i >= formAvgs.length - 2 ? "rgba(0,0,0,0)" : "#1A73E8"
+            ),
             datalabels: {
               color: "#000",
               anchor: "end",
               align: "end",
-              formatter: (v: number) => v.toFixed(2),
+              formatter: (v: number, ctx: any) =>
+                ctx.dataIndex >= formAvgs.length - 2 ? "" : v.toFixed(2),
             },
           },
           {
@@ -254,23 +258,11 @@ export async function GET(req: Request, { params }: { params: { formId: string }
           x: {
             min: 0,
             max: 5,
-            suggestedMin: 0,
-            suggestedMax: 5,
-            grace: 0,
-            offset: false,
             beginAtZero: true,
             ticks: { stepSize: 1 },
-          },
-          y: {
-            min: 0,
-            max: 5,
-            suggestedMin: 0,
-            suggestedMax: 5,
             grace: 0,
-            offset: false,
-            beginAtZero: true,
-            ticks: { stepSize: 1 },
           },
+          y: { beginAtZero: true },
         },
       },
     };
