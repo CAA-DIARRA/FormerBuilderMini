@@ -5,8 +5,37 @@ import ExcelJS from "exceljs";
 import { LABELS } from "../../../../lib/labels";
 
 const prisma = new PrismaClient();
-const bufFrom = (ab: ArrayBuffer) => Buffer.from(new Uint8Array(ab));
 
+// === Fonction POST QuickChart fiable ===
+async function fetchChartBase64Post(config: object, width = 1200, height = 550): Promise<string | null> {
+  const body = {
+    backgroundColor: "white",
+    width,
+    height,
+    format: "png",
+    encoding: "base64",
+    chart: config,
+  };
+
+  try {
+    const resp = await fetch("https://quickchart.io/chart", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      console.error("QuickChart error", await resp.text());
+      return null;
+    }
+    const txt = await resp.text();
+    return `data:image/png;base64,${txt}`;
+  } catch (e) {
+    console.error("QuickChart fetch failed", e);
+    return null;
+  }
+}
+
+// === Types ===
 type RespRow = {
   participantNom?: string | null;
   participantPrenoms?: string | null;
@@ -31,12 +60,13 @@ type RespRow = {
   temoignage?: string | null;
 };
 
+// === Route principale ===
 export async function GET(req: Request, { params }: { params: { formId: string } }) {
   try {
     const url = new URL(req.url);
     const lang = (url.searchParams.get("lang") === "en" ? "en" : "fr") as "fr" | "en";
     const L = LABELS[lang];
-    const seuil = 3; // ✅ Seuil fixe
+    const seuil = 3;
 
     const form = await prisma.form.findUnique({ where: { id: params.formId } });
     if (!form) return NextResponse.json({ error: "Form not found" }, { status: 404 });
@@ -44,54 +74,20 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const raw = await prisma.response.findMany({
       where: { formId: form.id },
       orderBy: { id: "asc" },
-      select: {
-        participantNom: true,
-        participantPrenoms: true,
-        participantEntreprise: true,
-        envAccueil: true,
-        envLieu: true,
-        envMateriel: true,
-        contAttentes: true,
-        contUtiliteTravail: true,
-        contExercices: true,
-        contMethodologie: true,
-        contSupports: true,
-        contRythme: true,
-        contGlobal: true,
-        formMaitrise: true,
-        formCommunication: true,
-        formClarte: true,
-        formMethodo: true,
-        formGlobal: true,
-        reponduAttentes: true,
-        formationsComplementaires: true,
-        temoignage: true,
-      },
     });
-
     const participants: RespRow[] = raw as RespRow[];
+
     const wb = new ExcelJS.Workbook();
     wb.creator = "FormerBuilder";
     wb.created = new Date();
 
-    // === Styles ===
-    const grayFill: ExcelJS.FillPattern = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "FFEFEFEF" },
-    };
-    const headerFill: ExcelJS.FillPattern = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "FF1A73E8" },
-    };
+    const grayFill: ExcelJS.FillPattern = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFEFEF" } };
+    const headerFill: ExcelJS.FillPattern = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1A73E8" } };
     const white = { argb: "FFFFFFFF" };
 
-    // ================= FEUILLE 1 — SYNTHÈSE =================
-    const ws1 = wb.addWorksheet(L.sheet1Title);
-    ws1.properties.defaultRowHeight = 18;
-
-    ws1.addRow([(L as any).reportTitle || "Rapport d’évaluation"]);
+    // === FEUILLE 1 — SYNTHÈSE ===
+    const ws1 = wb.addWorksheet(L.sheet1Title ?? "SYNTHÈSE");
+    ws1.addRow(["Rapport d’évaluation"]);
     ws1.mergeCells("A1:E1");
     ws1.getCell("A1").font = { bold: true, size: 14 };
 
@@ -99,7 +95,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       ["Date de session", form.sessionDate ? new Date(form.sessionDate).toLocaleDateString() : ""],
       ["Formateur", form.trainerName ?? ""],
       ["Lieu", form.location ?? ""],
-      ["URL formulaire", `${process.env.NEXT_PUBLIC_BASE_URL ?? ""}/f/${form.slug}`],
+      ["Seuil", `${seuil}`],
     ];
     metaRows.forEach((r) => ws1.addRow(r));
     ws1.addRow([]);
@@ -107,8 +103,9 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const initials = participants.map((p, i) => {
       const prenom = (p.participantPrenoms || "").trim();
       const nom = (p.participantNom || "").trim();
-      if (!prenom && !nom) return `P${i + 1}`;
-      return `${prenom[0] || ""}${nom[0] || ""}`.toUpperCase();
+      const i1 = prenom ? prenom[0] : "";
+      const i2 = nom ? nom[0] : "";
+      return (i1 + i2).toUpperCase() || `P${i + 1}`;
     });
 
     const envRows = (L as any).envRows;
@@ -126,28 +123,25 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       head.fill = headerFill;
     };
 
-    const writeBlock = (rows: any[]) => {
+    const writeCriteriaBlock = (rows: any[]) => {
       rows.forEach((r) => {
         const vals = participants.map((p) => (p[r.key as keyof RespRow] ?? null) as number | null);
-        const avg =
-          vals.filter((v) => typeof v === "number").reduce((s, v) => s + (v || 0), 0) /
-          (vals.filter((v) => typeof v === "number").length || 1);
+        const nums = vals.filter((v): v is number => typeof v === "number");
+        const avg = nums.length ? nums.reduce((s, v) => s + v, 0) / nums.length : null;
         ws1.addRow([r.label, ...vals, avg, seuil]);
       });
       ws1.addRow([]);
     };
 
     makeHeader("Environnement");
-    writeBlock(envRows);
+    writeCriteriaBlock(envRows);
     makeHeader("Contenu");
-    writeBlock(contRows);
-    makeHeader("Formateur(s)");
-    writeBlock(formRows);
+    writeCriteriaBlock(contRows);
+    makeHeader("Formateur");
+    writeCriteriaBlock(formRows);
 
-    // ================= FEUILLE 2 — GRAPHIQUE CONTENU =================
-    const ws2 = wb.addWorksheet(L.sheet2Title);
-    ws2.getColumn(1).width = 160;
-
+    // === FEUILLE 2 — GRAPHIQUE CONTENU ===
+    const ws2 = wb.addWorksheet(L.sheet2Title ?? "GRAPHIQUE CONTENU");
     const contLabels = contRows.map((r: any) => r.label);
     const contAvgs = contRows.map((r: any) => {
       const vals = participants.map((p) => (p[r.key as keyof RespRow] ?? 0) as number);
@@ -162,9 +156,9 @@ export async function GET(req: Request, { params }: { params: { formId: string }
           { label: "Moyenne", data: contAvgs, backgroundColor: "#1A73E8" },
           {
             label: `Seuil ${seuil}`,
-            data: contAvgs.map(() => seuil),
+            data: contLabels.map(() => seuil),
             type: "line",
-            borderColor: "#FF0000",
+            borderColor: "#E53935",
             borderWidth: 2,
             pointRadius: 0,
           },
@@ -172,25 +166,41 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       },
       options: {
         indexAxis: "y",
-        plugins: { legend: { position: "bottom" }, title: { display: true, text: L.sheet2Title } },
-        scales: { x: { min: 0, max: 5 } },
+        plugins: {
+          legend: { position: "bottom" },
+          title: { display: true, text: "GRAPHIQUE CONTENU" },
+        },
+        scales: {
+          x: {
+            min: 0,
+            max: 5,
+            suggestedMin: 0,
+            suggestedMax: 5,
+            beginAtZero: true,
+            ticks: { stepSize: 1 },
+            grid: { drawBorder: true },
+          },
+          y: {
+            min: 0,
+            max: 5,
+            suggestedMin: 0,
+            suggestedMax: 5,
+            beginAtZero: true,
+            ticks: { stepSize: 1 },
+            grid: { drawBorder: true },
+          },
+        },
       },
     };
 
-    const qcUrl1 = `https://quickchart.io/chart?c=${encodeURIComponent(
-      JSON.stringify(chartCfg1)
-    )}&format=png&backgroundColor=white&width=1200&height=550`;
-    const img1Resp = await fetch(qcUrl1);
-    if (img1Resp.ok) {
-      const ab = await img1Resp.arrayBuffer();
-      const imgId = wb.addImage({ buffer: ab, extension: "png" }); // ✅ Compatible Render/Node22
+    const base641 = await fetchChartBase64Post(chartCfg1);
+    if (base641) {
+      const imgId = wb.addImage({ base64: base641, extension: "png" });
       ws2.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
-    }
+    } else ws2.addRow(["Erreur de génération du graphique"]);
 
-    // ================= FEUILLE 3 — GRAPHIQUE FORMATEUR =================
-    const ws3 = wb.addWorksheet(L.sheet3Title);
-    ws3.getColumn(1).width = 160;
-
+    // === FEUILLE 3 — GRAPHIQUE FORMATEUR ===
+    const ws3 = wb.addWorksheet(L.sheet3Title ?? "GRAPHIQUE FORMATEUR");
     const formLabels = formRows.map((r: any) => r.label);
     const formAvgs = formRows.map((r: any) => {
       const vals = participants.map((p) => (p[r.key as keyof RespRow] ?? 0) as number);
@@ -205,9 +215,9 @@ export async function GET(req: Request, { params }: { params: { formId: string }
           { label: "Moyenne", data: formAvgs, backgroundColor: "#1A73E8" },
           {
             label: `Seuil ${seuil}`,
-            data: formAvgs.map(() => seuil),
+            data: formLabels.map(() => seuil),
             type: "line",
-            borderColor: "#FF0000",
+            borderColor: "#E53935",
             borderWidth: 2,
             pointRadius: 0,
           },
@@ -215,23 +225,41 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       },
       options: {
         indexAxis: "y",
-        plugins: { legend: { position: "bottom" }, title: { display: true, text: L.sheet3Title } },
-        scales: { x: { min: 0, max: 5 } },
+        plugins: {
+          legend: { position: "bottom" },
+          title: { display: true, text: "GRAPHIQUE FORMATEUR" },
+        },
+        scales: {
+          x: {
+            min: 0,
+            max: 5,
+            suggestedMin: 0,
+            suggestedMax: 5,
+            beginAtZero: true,
+            ticks: { stepSize: 1 },
+            grid: { drawBorder: true },
+          },
+          y: {
+            min: 0,
+            max: 5,
+            suggestedMin: 0,
+            suggestedMax: 5,
+            beginAtZero: true,
+            ticks: { stepSize: 1 },
+            grid: { drawBorder: true },
+          },
+        },
       },
     };
 
-    const qcUrl2 = `https://quickchart.io/chart?c=${encodeURIComponent(
-      JSON.stringify(chartCfg2)
-    )}&format=png&backgroundColor=white&width=1200&height=550`;
-    const img2Resp = await fetch(qcUrl2);
-    if (img2Resp.ok) {
-      const ab = await img2Resp.arrayBuffer();
-      const imgId = wb.addImage({ buffer: ab, extension: "png" }); // ✅ Compatible Render/Node22
+    const base642 = await fetchChartBase64Post(chartCfg2);
+    if (base642) {
+      const imgId = wb.addImage({ base64: base642, extension: "png" });
       ws3.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
-    }
+    } else ws3.addRow(["Erreur de génération du graphique"]);
 
-    // ================= FEUILLE 4 — CAMEMBERT ATTENTES =================
-    const ws4 = wb.addWorksheet(L.sheet4Title);
+    // === FEUILLE 4 — CAMEMBERT ATTENTES ===
+    const ws4 = wb.addWorksheet(L.sheet4Title ?? "ATTENTES");
     const resAtt = participants.map((p) => p.reponduAttentes || "");
     const countOui = resAtt.filter((x) => x === "OUI").length;
     const countPartiel = resAtt.filter((x) => x === "PARTIELLEMENT").length;
@@ -243,23 +271,21 @@ export async function GET(req: Request, { params }: { params: { formId: string }
         labels: ["OUI", "PARTIELLEMENT", "NON"],
         datasets: [{ data: [countOui, countPartiel, countNon] }],
       },
+      options: {
+        plugins: { legend: { position: "bottom" }, title: { display: true, text: "ATTENTES" } },
+      },
     };
 
-    const qcPie = `https://quickchart.io/chart?c=${encodeURIComponent(
-      JSON.stringify(pieCfg)
-    )}&format=png&backgroundColor=white&width=800&height=480`;
-    const imgPieResp = await fetch(qcPie);
-    if (imgPieResp.ok) {
-      const ab = await imgPieResp.arrayBuffer();
-      const imgId = wb.addImage({ buffer: ab, extension: "png" }); // ✅ Compatible Render/Node22
+    const base64Pie = await fetchChartBase64Post(pieCfg, 800, 480);
+    if (base64Pie) {
+      const imgId = wb.addImage({ base64: base64Pie, extension: "png" });
       ws4.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 800, height: 480 } });
-    }
+    } else ws4.addRow(["Erreur de génération du graphique"]);
 
-    // ================= EXPORT FINAL =================
+    // === Export final ===
     const xbuf = await wb.xlsx.writeBuffer();
-    const filename = `${(form.title || "evaluation")
-      .replace(/[^\p{L}\p{N}\-_ ]/gu, "")
-      .slice(0, 60)}_${lang.toUpperCase()}.xlsx`;
+    const fnameBase = (form.title || "evaluation").replace(/[^\p{L}\p{N}\-_ ]/gu, "").slice(0, 60);
+    const filename = `${fnameBase}_${lang.toUpperCase()}.xlsx`;
 
     return new NextResponse(xbuf as any, {
       status: 200,
@@ -269,7 +295,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       },
     });
   } catch (e: any) {
-    console.error(e);
+    console.error("EXPORT ERROR", e);
     return NextResponse.json({ error: e?.message || "Export failed" }, { status: 500 });
   }
 }
