@@ -5,7 +5,7 @@ import { LABELS } from "../../../../lib/labels";
 
 const prisma = new PrismaClient();
 
-/** QuickChart → base64 via POST (fiable sur Render) */
+/** QuickChart base64 POST */
 async function fetchChartBase64Post(config: object, width = 1200, height = 550): Promise<string | null> {
   try {
     const resp = await fetch("https://quickchart.io/chart", {
@@ -19,10 +19,12 @@ async function fetchChartBase64Post(config: object, width = 1200, height = 550):
         chart: config,
       }),
     });
+
     if (!resp.ok) {
       console.error("QuickChart error:", await resp.text());
       return null;
     }
+
     const ab = await resp.arrayBuffer();
     const base64 = Buffer.from(ab).toString("base64");
     return `data:image/png;base64,${base64}`;
@@ -32,10 +34,10 @@ async function fetchChartBase64Post(config: object, width = 1200, height = 550):
   }
 }
 
+/** Type des réponses */
 type RespRow = {
   participantNom?: string | null;
   participantPrenoms?: string | null;
-  participantEntreprise?: string | null;
   envAccueil?: number | null;
   envLieu?: number | null;
   envMateriel?: number | null;
@@ -52,28 +54,21 @@ type RespRow = {
   formMethodo?: number | null;
   formGlobal?: number | null;
   reponduAttentes?: "OUI" | "PARTIELLEMENT" | "NON" | null;
-  formationsComplementaires?: string | null;
-  temoignage?: string | null;
 };
 
 export async function GET(req: Request, { params }: { params: { formId: string } }) {
   try {
     const url = new URL(req.url);
-    const lang = (url.searchParams.get("lang") === "en" ? "en" : "fr") as "fr" | "en";
-    const L = LABELS[lang];
+    const lang = url.searchParams.get("lang") === "en" ? "en" : "fr";
+    const L = LABELS[lang as "fr" | "en"];
     const seuil = 3;
 
-    // ------- Données -------
     const form = await prisma.form.findUnique({ where: { id: params.formId } });
     if (!form) return new Response(JSON.stringify({ error: "Form not found" }), { status: 404 });
 
-    const raw = await prisma.response.findMany({
-      where: { formId: form.id },
-      orderBy: { id: "asc" },
-    });
+    const raw = await prisma.response.findMany({ where: { formId: form.id }, orderBy: { id: "asc" } });
     const participants: RespRow[] = raw as RespRow[];
 
-    // ------- Excel --------
     const wb = new ExcelJS.Workbook();
     wb.creator = "FormerBuilder";
     wb.created = new Date();
@@ -132,19 +127,14 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     makeHeader("Formateur");
     writeCriteriaBlock(formRows);
 
-    // ------- Config Chart commune (force 0 → 5, aucune donnée fantôme) -------
+    // === Fonction Chart commune ===
     const buildChartCfg = (title: string, labels: string[], avgs: number[]) => ({
       type: "bar",
       data: {
         labels,
         datasets: [
+          { label: "Moyenne", data: avgs, backgroundColor: "#1A73E8" },
           {
-            label: "Moyenne",
-            data: avgs,
-            backgroundColor: "#1A73E8",
-          },
-          {
-            // Ligne seuil = 3
             label: `Seuil ${seuil}`,
             data: labels.map(() => seuil),
             type: "line",
@@ -152,36 +142,35 @@ export async function GET(req: Request, { params }: { params: { formId: string }
             borderWidth: 2,
             pointRadius: 0,
             fill: false,
-            // IMPORTANT: cette ligne ne crée aucune barre
+          },
+          {
+            // ✅ dataset invisible qui force l’échelle 0→5
+            label: "_invisible_bounds_",
+            data: [0, 5],
+            backgroundColor: "rgba(0,0,0,0)",
+            borderColor: "rgba(0,0,0,0)",
+            type: "line",
+            pointRadius: 0,
+            borderWidth: 0,
+            fill: false,
           },
         ],
       },
       options: {
-        indexAxis: "y",                 // barres horizontales
-        parsing: true,
-        animation: false,
+        indexAxis: "y",
         plugins: {
           legend: { position: "bottom" },
           title: { display: true, text: title },
           tooltip: { enabled: true },
-          // PAS de datalabels ⇒ aucun chiffre au-dessus des barres
         },
-        // 👉 Chart.js v4 : on force explicitement les types d’axes et les bornes
         scales: {
           x: {
-            type: "linear",
             min: 0,
             max: 5,
             beginAtZero: true,
-            bounds: "ticks",
-            grace: 0,
             ticks: { stepSize: 1 },
           },
-          y: {
-            type: "category",
-            offset: false,
-            ticks: { autoSkip: false },
-          },
+          y: { ticks: { autoSkip: false } },
         },
       },
     });
@@ -199,15 +188,10 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     if (base641) {
       const imgId = wb.addImage({ base64: base641, extension: "png" });
       ws2.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1100, height: 500 } });
-    } else {
-      ws2.addRow(["Erreur de génération du graphique"]);
-    }
+    } else ws2.addRow(["Erreur de génération du graphique"]);
     ws2.addRow([]);
     ws2.addRow(["Légende : Très bien : 4    Bien : 3    Passable : 2    Mauvais : 1    Cible : 3"]);
-    // On met juste "Cible : 3" en rouge (pas de richText dans ExcelJS cellule)
-    const txt2 = ws2.getCell(ws2.lastRow!.number, 1).value as string;
-    const idxCible2 = txt2.indexOf("Cible : 3");
-    if (idxCible2 >= 0) ws2.getCell(ws2.lastRow!.number, 1).font = { color: { argb: "FFE53935" }, italic: true };
+    ws2.getCell(ws2.lastRow!.number, 1).font = { color: { argb: "FFE53935" }, italic: true };
 
     // === FEUILLE 3 — GRAPHIQUE FORMATEUR ===
     const ws3 = wb.addWorksheet("GRAPHIQUE FORMATEUR");
@@ -222,14 +206,10 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     if (base642) {
       const imgId = wb.addImage({ base64: base642, extension: "png" });
       ws3.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1100, height: 500 } });
-    } else {
-      ws3.addRow(["Erreur de génération du graphique"]);
-    }
+    } else ws3.addRow(["Erreur de génération du graphique"]);
     ws3.addRow([]);
     ws3.addRow(["Légende : Très bien : 4    Bien : 3    Passable : 2    Mauvais : 1    Cible : 3"]);
-    const txt3 = ws3.getCell(ws3.lastRow!.number, 1).value as string;
-    const idxCible3 = txt3.indexOf("Cible : 3");
-    if (idxCible3 >= 0) ws3.getCell(ws3.lastRow!.number, 1).font = { color: { argb: "FFE53935" }, italic: true };
+    ws3.getCell(ws3.lastRow!.number, 1).font = { color: { argb: "FFE53935" }, italic: true };
 
     // === FEUILLE 4 — CAMEMBERT ATTENTES ===
     const ws4 = wb.addWorksheet("ATTENTES");
@@ -251,11 +231,9 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     if (base64Pie) {
       const imgId = wb.addImage({ base64: base64Pie, extension: "png" });
       ws4.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 800, height: 480 } });
-    } else {
-      ws4.addRow(["Erreur de génération du graphique"]);
-    }
+    } else ws4.addRow(["Erreur de génération du graphique"]);
 
-    // ------- Envoi -------
+    // === EXPORT FINAL ===
     const buffer = await wb.xlsx.writeBuffer();
     const fnameBase = (form.title || "evaluation").replace(/[^\p{L}\p{N}\-_ ]/gu, "").slice(0, 60);
     const filename = `${fnameBase}_${lang.toUpperCase()}.xlsx`;
