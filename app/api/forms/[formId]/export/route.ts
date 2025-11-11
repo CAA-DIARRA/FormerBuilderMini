@@ -1,41 +1,38 @@
 // app/api/forms/[formId]/export/route.ts
-import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import ExcelJS from "exceljs";
 import { LABELS } from "../../../../lib/labels";
 
 const prisma = new PrismaClient();
 
-// === Fonction POST QuickChart fiable ===
+// --- QuickChart via POST (fiable sur Render)
 async function fetchChartBase64Post(config: object, width = 1200, height = 550): Promise<string | null> {
-  const body = {
-    backgroundColor: "white",
-    width,
-    height,
-    format: "png",
-    encoding: "base64",
-    chart: config,
-  };
-
   try {
     const resp = await fetch("https://quickchart.io/chart", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        backgroundColor: "white",
+        width,
+        height,
+        format: "png",
+        encoding: "base64",
+        chart: config,
+      }),
     });
+
     if (!resp.ok) {
-      console.error("QuickChart error", await resp.text());
+      console.error("QuickChart error:", await resp.text());
       return null;
     }
     const txt = await resp.text();
     return `data:image/png;base64,${txt}`;
-  } catch (e) {
-    console.error("QuickChart fetch failed", e);
+  } catch (err) {
+    console.error("QuickChart fetch failed:", err);
     return null;
   }
 }
 
-// === Types ===
 type RespRow = {
   participantNom?: string | null;
   participantPrenoms?: string | null;
@@ -60,7 +57,7 @@ type RespRow = {
   temoignage?: string | null;
 };
 
-// === Route principale ===
+// === MAIN ===
 export async function GET(req: Request, { params }: { params: { formId: string } }) {
   try {
     const url = new URL(req.url);
@@ -69,7 +66,9 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const seuil = 3;
 
     const form = await prisma.form.findUnique({ where: { id: params.formId } });
-    if (!form) return NextResponse.json({ error: "Form not found" }, { status: 404 });
+    if (!form) {
+      return new Response(JSON.stringify({ error: "Form not found" }), { status: 404 });
+    }
 
     const raw = await prisma.response.findMany({
       where: { formId: form.id },
@@ -85,19 +84,16 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const headerFill: ExcelJS.FillPattern = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1A73E8" } };
     const white = { argb: "FFFFFFFF" };
 
-    // === FEUILLE 1 — SYNTHÈSE ===
+    // === FEUILLE 1 ===
     const ws1 = wb.addWorksheet(L.sheet1Title ?? "SYNTHÈSE");
     ws1.addRow(["Rapport d’évaluation"]);
     ws1.mergeCells("A1:E1");
     ws1.getCell("A1").font = { bold: true, size: 14 };
 
-    const metaRows: Array<[string, string]> = [
-      ["Date de session", form.sessionDate ? new Date(form.sessionDate).toLocaleDateString() : ""],
-      ["Formateur", form.trainerName ?? ""],
-      ["Lieu", form.location ?? ""],
-      ["Seuil", `${seuil}`],
-    ];
-    metaRows.forEach((r) => ws1.addRow(r));
+    ws1.addRow(["Date de session", form.sessionDate ? new Date(form.sessionDate).toLocaleDateString() : ""]);
+    ws1.addRow(["Formateur", form.trainerName ?? ""]);
+    ws1.addRow(["Lieu", form.location ?? ""]);
+    ws1.addRow(["Seuil", `${seuil}`]);
     ws1.addRow([]);
 
     const initials = participants.map((p, i) => {
@@ -141,7 +137,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     writeCriteriaBlock(formRows);
 
     // === FEUILLE 2 — GRAPHIQUE CONTENU ===
-    const ws2 = wb.addWorksheet(L.sheet2Title ?? "GRAPHIQUE CONTENU");
+    const ws2 = wb.addWorksheet("GRAPHIQUE CONTENU");
     const contLabels = contRows.map((r: any) => r.label);
     const contAvgs = contRows.map((r: any) => {
       const vals = participants.map((p) => (p[r.key as keyof RespRow] ?? 0) as number);
@@ -178,7 +174,6 @@ export async function GET(req: Request, { params }: { params: { formId: string }
             suggestedMax: 5,
             beginAtZero: true,
             ticks: { stepSize: 1 },
-            grid: { drawBorder: true },
           },
           y: {
             min: 0,
@@ -187,7 +182,6 @@ export async function GET(req: Request, { params }: { params: { formId: string }
             suggestedMax: 5,
             beginAtZero: true,
             ticks: { stepSize: 1 },
-            grid: { drawBorder: true },
           },
         },
       },
@@ -200,7 +194,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     } else ws2.addRow(["Erreur de génération du graphique"]);
 
     // === FEUILLE 3 — GRAPHIQUE FORMATEUR ===
-    const ws3 = wb.addWorksheet(L.sheet3Title ?? "GRAPHIQUE FORMATEUR");
+    const ws3 = wb.addWorksheet("GRAPHIQUE FORMATEUR");
     const formLabels = formRows.map((r: any) => r.label);
     const formAvgs = formRows.map((r: any) => {
       const vals = participants.map((p) => (p[r.key as keyof RespRow] ?? 0) as number);
@@ -237,7 +231,6 @@ export async function GET(req: Request, { params }: { params: { formId: string }
             suggestedMax: 5,
             beginAtZero: true,
             ticks: { stepSize: 1 },
-            grid: { drawBorder: true },
           },
           y: {
             min: 0,
@@ -246,7 +239,6 @@ export async function GET(req: Request, { params }: { params: { formId: string }
             suggestedMax: 5,
             beginAtZero: true,
             ticks: { stepSize: 1 },
-            grid: { drawBorder: true },
           },
         },
       },
@@ -259,7 +251,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     } else ws3.addRow(["Erreur de génération du graphique"]);
 
     // === FEUILLE 4 — CAMEMBERT ATTENTES ===
-    const ws4 = wb.addWorksheet(L.sheet4Title ?? "ATTENTES");
+    const ws4 = wb.addWorksheet("ATTENTES");
     const resAtt = participants.map((p) => p.reponduAttentes || "");
     const countOui = resAtt.filter((x) => x === "OUI").length;
     const countPartiel = resAtt.filter((x) => x === "PARTIELLEMENT").length;
@@ -271,9 +263,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
         labels: ["OUI", "PARTIELLEMENT", "NON"],
         datasets: [{ data: [countOui, countPartiel, countNon] }],
       },
-      options: {
-        plugins: { legend: { position: "bottom" }, title: { display: true, text: "ATTENTES" } },
-      },
+      options: { plugins: { legend: { position: "bottom" }, title: { display: true, text: "ATTENTES" } } },
     };
 
     const base64Pie = await fetchChartBase64Post(pieCfg, 800, 480);
@@ -282,12 +272,12 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       ws4.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 800, height: 480 } });
     } else ws4.addRow(["Erreur de génération du graphique"]);
 
-    // === Export final ===
-    const xbuf = await wb.xlsx.writeBuffer();
+    // === EXPORT FINAL ===
+    const buffer = await wb.xlsx.writeBuffer();
     const fnameBase = (form.title || "evaluation").replace(/[^\p{L}\p{N}\-_ ]/gu, "").slice(0, 60);
     const filename = `${fnameBase}_${lang.toUpperCase()}.xlsx`;
 
-    return new NextResponse(xbuf as any, {
+    return new Response(buffer, {
       status: 200,
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -296,6 +286,6 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     });
   } catch (e: any) {
     console.error("EXPORT ERROR", e);
-    return NextResponse.json({ error: e?.message || "Export failed" }, { status: 500 });
+    return new Response(JSON.stringify({ error: e?.message || "Export failed" }), { status: 500 });
   }
 }
