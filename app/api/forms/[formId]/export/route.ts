@@ -173,7 +173,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       options: {
         indexAxis: "y",
         plugins: { legend: { position: "bottom" }, title: { display: true, text: L.sheet2Title } },
-        scales: { x: { min: 0, max: 4 } },
+        scales: { x: { min: 0, max: 5 } },
       },
     };
 
@@ -216,7 +216,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       options: {
         indexAxis: "y",
         plugins: { legend: { position: "bottom" }, title: { display: true, text: L.sheet3Title } },
-        scales: { x: { min: 0, max: 4 } },
+        scales: { x: { min: 0, max: 5 } },
       },
     };
 
