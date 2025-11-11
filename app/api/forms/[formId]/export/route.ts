@@ -1,10 +1,11 @@
+// app/api/forms/[formId]/export/route.ts
 import { PrismaClient } from "@prisma/client";
 import ExcelJS from "exceljs";
 import { LABELS } from "../../../../lib/labels";
 
 const prisma = new PrismaClient();
 
-// --- QuickChart POST (compatible Render)
+/** --- QuickChart en POST base64 --- */
 async function fetchChartBase64Post(config: object, width = 1200, height = 550): Promise<string | null> {
   try {
     const resp = await fetch("https://quickchart.io/chart", {
@@ -15,6 +16,7 @@ async function fetchChartBase64Post(config: object, width = 1200, height = 550):
         width,
         height,
         format: "png",
+        encoding: "base64",
         chart: config,
       }),
     });
@@ -23,16 +25,15 @@ async function fetchChartBase64Post(config: object, width = 1200, height = 550):
       console.error("QuickChart error:", await resp.text());
       return null;
     }
-
-    const buffer = Buffer.from(await resp.arrayBuffer());
-    const base64 = buffer.toString("base64");
-    return `data:image/png;base64,${base64}`;
+    const txt = await resp.text();
+    return `data:image/png;base64,${txt}`;
   } catch (err) {
     console.error("QuickChart fetch failed:", err);
     return null;
   }
 }
 
+/** --- Type de réponse --- */
 type RespRow = {
   participantNom?: string | null;
   participantPrenoms?: string | null;
@@ -57,7 +58,7 @@ type RespRow = {
   temoignage?: string | null;
 };
 
-// === MAIN ===
+/** === ROUTE PRINCIPALE === */
 export async function GET(req: Request, { params }: { params: { formId: string } }) {
   try {
     const url = new URL(req.url);
@@ -66,9 +67,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const seuil = 3;
 
     const form = await prisma.form.findUnique({ where: { id: params.formId } });
-    if (!form) {
-      return new Response(JSON.stringify({ error: "Form not found" }), { status: 404 });
-    }
+    if (!form) return new Response(JSON.stringify({ error: "Form not found" }), { status: 404 });
 
     const raw = await prisma.response.findMany({
       where: { formId: form.id },
@@ -84,7 +83,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const headerFill: ExcelJS.FillPattern = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1A73E8" } };
     const white = { argb: "FFFFFFFF" };
 
-    // === FEUILLE 1 ===
+    // === FEUILLE 1 — SYNTHÈSE ===
     const ws1 = wb.addWorksheet(L.sheet1Title ?? "SYNTHÈSE");
     ws1.addRow(["Rapport d’évaluation"]);
     ws1.mergeCells("A1:E1");
@@ -99,9 +98,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     const initials = participants.map((p, i) => {
       const prenom = (p.participantPrenoms || "").trim();
       const nom = (p.participantNom || "").trim();
-      const i1 = prenom ? prenom[0] : "";
-      const i2 = nom ? nom[0] : "";
-      return (i1 + i2).toUpperCase() || `P${i + 1}`;
+      return ((prenom ? prenom[0] : "") + (nom ? nom[0] : "")).toUpperCase() || `P${i + 1}`;
     });
 
     const envRows = (L as any).envRows;
@@ -136,27 +133,16 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     makeHeader("Formateur");
     writeCriteriaBlock(formRows);
 
-    // === FEUILLE GRAPHIQUE CONTENU ===
-    const ws2 = wb.addWorksheet("GRAPHIQUE CONTENU");
-    const contLabels = [...contRows.map((r: any) => r.label), " ", " "];
-    const contAvgs = [
-      ...contRows.map((r: any) => {
-        const vals = participants.map((p) => (p[r.key as keyof RespRow] ?? 0) as number);
-        return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-      }),
-      0,
-      5,
-    ];
-
-    const chartCfg1 = {
+    /** === FONCTION CHART CONFIG COMMUNE === */
+    const buildChartCfg = (title: string, labels: string[], avgs: number[]) => ({
       type: "bar",
       data: {
-        labels: contLabels,
+        labels,
         datasets: [
-          { label: "Moyenne", data: contAvgs, backgroundColor: "#1A73E8" },
+          { label: "Moyenne", data: avgs, backgroundColor: "#1A73E8" },
           {
-            label: "Seuil",
-            data: contLabels.map(() => seuil),
+            label: `Seuil ${seuil}`,
+            data: labels.map(() => seuil),
             type: "line",
             borderColor: "#E53935",
             borderWidth: 2,
@@ -166,73 +152,61 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       },
       options: {
         indexAxis: "y",
-        plugins: { legend: { display: false }, title: { display: true, text: "GRAPHIQUE CONTENU" } },
-        scales: { x: { min: 0, max: 5, ticks: { stepSize: 1 } }, y: { beginAtZero: true } },
+        plugins: {
+          legend: { position: "bottom" },
+          title: { display: true, text: title },
+        },
+        scales: {
+          x: {
+            min: 0,
+            max: 5,
+            beginAtZero: true,
+            ticks: { stepSize: 1 },
+          },
+          y: { beginAtZero: true },
+        },
       },
-    };
+    });
 
+    /** === FEUILLE 2 — GRAPHIQUE CONTENU === */
+    const ws2 = wb.addWorksheet("GRAPHIQUE CONTENU");
+    const contLabels = contRows.map((r: any) => r.label);
+    const contAvgs = contRows.map((r: any) => {
+      const vals = participants.map((p) => (p[r.key as keyof RespRow] ?? 0) as number);
+      return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+    });
+
+    const chartCfg1 = buildChartCfg("GRAPHIQUE CONTENU", contLabels, contAvgs);
     const base641 = await fetchChartBase64Post(chartCfg1);
     if (base641) {
       const imgId = wb.addImage({ base64: base641, extension: "png" });
-      ws2.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
-      const legend = ws2.addRow([]);
-      legend.getCell(1).value = {
-        richText: [
-          { text: "Légende : Très bien : 4    Bien : 3    Passable : 2    Mauvais : 1    ", font: { color: { argb: "FF000000" } } },
-          { text: "Cible : 3", font: { color: { argb: "FFE53935" }, bold: true } },
-        ],
-      };
+      ws2.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1100, height: 500 } });
     } else ws2.addRow(["Erreur de génération du graphique"]);
 
-    // === FEUILLE GRAPHIQUE FORMATEUR ===
+    ws2.addRow([]);
+    ws2.addRow(["Légende : Très bien : 4    Bien : 3    Passable : 2    Mauvais : 1    Cible : 3"]);
+    ws2.getCell(`A${ws2.lastRow?.number}`).font = { color: { argb: "FFE53935" }, italic: true };
+
+    /** === FEUILLE 3 — GRAPHIQUE FORMATEUR === */
     const ws3 = wb.addWorksheet("GRAPHIQUE FORMATEUR");
-    const formLabels = [...formRows.map((r: any) => r.label), " ", " "];
-    const formAvgs = [
-      ...formRows.map((r: any) => {
-        const vals = participants.map((p) => (p[r.key as keyof RespRow] ?? 0) as number);
-        return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-      }),
-      0,
-      5,
-    ];
+    const formLabels = formRows.map((r: any) => r.label);
+    const formAvgs = formRows.map((r: any) => {
+      const vals = participants.map((p) => (p[r.key as keyof RespRow] ?? 0) as number);
+      return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+    });
 
-    const chartCfg2 = {
-      type: "bar",
-      data: {
-        labels: formLabels,
-        datasets: [
-          { label: "Moyenne", data: formAvgs, backgroundColor: "#1A73E8" },
-          {
-            label: "Seuil",
-            data: formLabels.map(() => seuil),
-            type: "line",
-            borderColor: "#E53935",
-            borderWidth: 2,
-            pointRadius: 0,
-          },
-        ],
-      },
-      options: {
-        indexAxis: "y",
-        plugins: { legend: { display: false }, title: { display: true, text: "GRAPHIQUE FORMATEUR" } },
-        scales: { x: { min: 0, max: 5, ticks: { stepSize: 1 } }, y: { beginAtZero: true } },
-      },
-    };
-
+    const chartCfg2 = buildChartCfg("GRAPHIQUE FORMATEUR", formLabels, formAvgs);
     const base642 = await fetchChartBase64Post(chartCfg2);
     if (base642) {
       const imgId = wb.addImage({ base64: base642, extension: "png" });
-      ws3.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
-      const legend = ws3.addRow([]);
-      legend.getCell(1).value = {
-        richText: [
-          { text: "Légende : Très bien : 4    Bien : 3    Passable : 2    Mauvais : 1    ", font: { color: { argb: "FF000000" } } },
-          { text: "Cible : 3", font: { color: { argb: "FFE53935" }, bold: true } },
-        ],
-      };
+      ws3.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1100, height: 500 } });
     } else ws3.addRow(["Erreur de génération du graphique"]);
 
-    // === FEUILLE ATTENTES ===
+    ws3.addRow([]);
+    ws3.addRow(["Légende : Très bien : 4    Bien : 3    Passable : 2    Mauvais : 1    Cible : 3"]);
+    ws3.getCell(`A${ws3.lastRow?.number}`).font = { color: { argb: "FFE53935" }, italic: true };
+
+    /** === FEUILLE 4 — CAMEMBERT ATTENTES === */
     const ws4 = wb.addWorksheet("ATTENTES");
     const resAtt = participants.map((p) => p.reponduAttentes || "");
     const countOui = resAtt.filter((x) => x === "OUI").length;
@@ -241,7 +215,10 @@ export async function GET(req: Request, { params }: { params: { formId: string }
 
     const pieCfg = {
       type: "pie",
-      data: { labels: ["OUI", "PARTIELLEMENT", "NON"], datasets: [{ data: [countOui, countPartiel, countNon] }] },
+      data: {
+        labels: ["OUI", "PARTIELLEMENT", "NON"],
+        datasets: [{ data: [countOui, countPartiel, countNon] }],
+      },
       options: { plugins: { legend: { position: "bottom" }, title: { display: true, text: "ATTENTES" } } },
     };
 
@@ -251,7 +228,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       ws4.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 800, height: 480 } });
     } else ws4.addRow(["Erreur de génération du graphique"]);
 
-    // === EXPORT FINAL ===
+    /** === EXPORT FINAL === */
     const buffer = await wb.xlsx.writeBuffer();
     const fnameBase = (form.title || "evaluation").replace(/[^\p{L}\p{N}\-_ ]/gu, "").slice(0, 60);
     const filename = `${fnameBase}_${lang.toUpperCase()}.xlsx`;
