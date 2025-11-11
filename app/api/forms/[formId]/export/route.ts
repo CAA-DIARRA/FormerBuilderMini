@@ -38,6 +38,7 @@ async function fetchChartBase64Post(config: object, width = 1200, height = 550):
 type RespRow = {
   participantNom?: string | null;
   participantPrenoms?: string | null;
+  participantEntreprise?: string | null;
   envAccueil?: number | null;
   envLieu?: number | null;
   envMateriel?: number | null;
@@ -53,7 +54,7 @@ type RespRow = {
   formClarte?: number | null;
   formMethodo?: number | null;
   formGlobal?: number | null;
-  reponduAttentes?: "OUI" | "PARTIELLEMENT" | "NON" | null;
+  reponduAttentes?: "OUI" | "NON" | null; // 👈 PARTIELLEMENT supprimé
 };
 
 export async function GET(req: Request, { params }: { params: { formId: string } }) {
@@ -144,7 +145,6 @@ export async function GET(req: Request, { params }: { params: { formId: string }
             fill: false,
           },
           {
-            // ✅ dataset invisible qui force l’échelle 0→5
             label: "_invisible_bounds_",
             data: [0, 5],
             backgroundColor: "rgba(0,0,0,0)",
@@ -161,15 +161,9 @@ export async function GET(req: Request, { params }: { params: { formId: string }
         plugins: {
           legend: { position: "bottom" },
           title: { display: true, text: title },
-          tooltip: { enabled: true },
         },
         scales: {
-          x: {
-            min: 0,
-            max: 5,
-            beginAtZero: true,
-            ticks: { stepSize: 1 },
-          },
+          x: { min: 0, max: 5, beginAtZero: true, ticks: { stepSize: 1 } },
           y: { ticks: { autoSkip: false } },
         },
       },
@@ -211,18 +205,17 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     ws3.addRow(["Légende : Très bien : 4    Bien : 3    Passable : 2    Mauvais : 1    Cible : 3"]);
     ws3.getCell(ws3.lastRow!.number, 1).font = { color: { argb: "FFE53935" }, italic: true };
 
-    // === FEUILLE 4 — CAMEMBERT ATTENTES ===
+    // === FEUILLE 4 — CAMEMBERT ATTENTES (sans PARTIELLEMENT) ===
     const ws4 = wb.addWorksheet("ATTENTES");
     const resAtt = participants.map((p) => p.reponduAttentes || "");
     const countOui = resAtt.filter((x) => x === "OUI").length;
-    const countPartiel = resAtt.filter((x) => x === "PARTIELLEMENT").length;
     const countNon = resAtt.filter((x) => x === "NON").length;
 
     const pieCfg = {
       type: "pie",
       data: {
-        labels: ["OUI", "PARTIELLEMENT", "NON"],
-        datasets: [{ data: [countOui, countPartiel, countNon] }],
+        labels: ["OUI", "NON"],
+        datasets: [{ data: [countOui, countNon], backgroundColor: ["#1A73E8", "#E53935"] }],
       },
       options: { plugins: { legend: { position: "bottom" }, title: { display: true, text: "ATTENTES" } } },
     };
