@@ -25,7 +25,7 @@ async function fetchChartBase64Post(config: object, width = 1200, height = 550):
       return null;
     }
 
-    // ✅ Lecture binaire → conversion manuelle en base64
+    // ✅ lecture binaire → conversion en base64 manuelle (Render-friendly)
     const arrayBuf = await resp.arrayBuffer();
     const buffer = Buffer.from(arrayBuf);
     const base64 = buffer.toString("base64");
@@ -154,18 +154,21 @@ export async function GET(req: Request, { params }: { params: { formId: string }
         ],
       },
       options: {
+        indexAxis: "y", // ✅ barres horizontales
         plugins: {
           legend: { position: "bottom" },
           title: { display: true, text: title },
         },
         scales: {
-          y: {
+          x: { // ✅ axe des valeurs (0 → 5)
             min: 0,
             max: 5,
             beginAtZero: true,
             ticks: { stepSize: 1 },
           },
-          x: { ticks: { autoSkip: false } },
+          y: { // ✅ axe des labels
+            ticks: { autoSkip: false },
+          },
         },
       },
     });
