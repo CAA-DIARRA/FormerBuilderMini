@@ -5,7 +5,7 @@ import { LABELS } from "../../../../lib/labels";
 
 const prisma = new PrismaClient();
 
-/** --- QuickChart en POST base64 --- */
+/** --- QuickChart : génération base64 fiable sur Render --- */
 async function fetchChartBase64Post(config: object, width = 1200, height = 550): Promise<string | null> {
   try {
     const resp = await fetch("https://quickchart.io/chart", {
@@ -16,7 +16,6 @@ async function fetchChartBase64Post(config: object, width = 1200, height = 550):
         width,
         height,
         format: "png",
-        encoding: "base64",
         chart: config,
       }),
     });
@@ -25,8 +24,12 @@ async function fetchChartBase64Post(config: object, width = 1200, height = 550):
       console.error("QuickChart error:", await resp.text());
       return null;
     }
-    const txt = await resp.text();
-    return `data:image/png;base64,${txt}`;
+
+    // ✅ Lecture binaire → conversion manuelle en base64
+    const arrayBuf = await resp.arrayBuffer();
+    const buffer = Buffer.from(arrayBuf);
+    const base64 = buffer.toString("base64");
+    return `data:image/png;base64,${base64}`;
   } catch (err) {
     console.error("QuickChart fetch failed:", err);
     return null;
@@ -151,19 +154,18 @@ export async function GET(req: Request, { params }: { params: { formId: string }
         ],
       },
       options: {
-        indexAxis: "y",
         plugins: {
           legend: { position: "bottom" },
           title: { display: true, text: title },
         },
         scales: {
-          x: {
+          y: {
             min: 0,
             max: 5,
             beginAtZero: true,
             ticks: { stepSize: 1 },
           },
-          y: { beginAtZero: true },
+          x: { ticks: { autoSkip: false } },
         },
       },
     });
