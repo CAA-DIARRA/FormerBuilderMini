@@ -16,7 +16,6 @@ async function fetchChartBase64Post(config: object, width = 1200, height = 550):
         width,
         height,
         format: "png",
-        encoding: "base64",
         chart: config,
       }),
     });
@@ -25,8 +24,10 @@ async function fetchChartBase64Post(config: object, width = 1200, height = 550):
       console.error("QuickChart error:", await resp.text());
       return null;
     }
-    const txt = await resp.text();
-    return `data:image/png;base64,${txt}`;
+
+    const buffer = Buffer.from(await resp.arrayBuffer());
+    const base64 = buffer.toString("base64");
+    return `data:image/png;base64,${base64}`;
   } catch (err) {
     console.error("QuickChart fetch failed:", err);
     return null;
@@ -149,7 +150,17 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       data: {
         labels: contLabels,
         datasets: [
-          { label: "Moyenne", data: contAvgs, backgroundColor: "#1A73E8" },
+          {
+            label: "Moyenne",
+            data: contAvgs,
+            backgroundColor: "#1A73E8",
+            datalabels: {
+              color: "#000",
+              anchor: "end",
+              align: "end",
+              formatter: (v: number) => v.toFixed(2),
+            },
+          },
           {
             label: `Seuil ${seuil}`,
             data: contLabels.map(() => seuil),
@@ -165,24 +176,11 @@ export async function GET(req: Request, { params }: { params: { formId: string }
         plugins: {
           legend: { position: "bottom" },
           title: { display: true, text: "GRAPHIQUE CONTENU" },
+          datalabels: { font: { size: 12, weight: "bold" } },
         },
         scales: {
-          x: {
-            min: 0,
-            max: 5,
-            suggestedMin: 0,
-            suggestedMax: 5,
-            beginAtZero: true,
-            ticks: { stepSize: 1 },
-          },
-          y: {
-            min: 0,
-            max: 5,
-            suggestedMin: 0,
-            suggestedMax: 5,
-            beginAtZero: true,
-            ticks: { stepSize: 1 },
-          },
+          x: { min: 0, max: 5, beginAtZero: true, ticks: { stepSize: 1 } },
+          y: { min: 0, max: 5, beginAtZero: true, ticks: { stepSize: 1 } },
         },
       },
     };
@@ -206,7 +204,17 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       data: {
         labels: formLabels,
         datasets: [
-          { label: "Moyenne", data: formAvgs, backgroundColor: "#1A73E8" },
+          {
+            label: "Moyenne",
+            data: formAvgs,
+            backgroundColor: "#1A73E8",
+            datalabels: {
+              color: "#000",
+              anchor: "end",
+              align: "end",
+              formatter: (v: number) => v.toFixed(2),
+            },
+          },
           {
             label: `Seuil ${seuil}`,
             data: formLabels.map(() => seuil),
@@ -222,24 +230,11 @@ export async function GET(req: Request, { params }: { params: { formId: string }
         plugins: {
           legend: { position: "bottom" },
           title: { display: true, text: "GRAPHIQUE FORMATEUR" },
+          datalabels: { font: { size: 12, weight: "bold" } },
         },
         scales: {
-          x: {
-            min: 0,
-            max: 5,
-            suggestedMin: 0,
-            suggestedMax: 5,
-            beginAtZero: true,
-            ticks: { stepSize: 1 },
-          },
-          y: {
-            min: 0,
-            max: 5,
-            suggestedMin: 0,
-            suggestedMax: 5,
-            beginAtZero: true,
-            ticks: { stepSize: 1 },
-          },
+          x: { min: 0, max: 5, beginAtZero: true, ticks: { stepSize: 1 } },
+          y: { min: 0, max: 5, beginAtZero: true, ticks: { stepSize: 1 } },
         },
       },
     };
