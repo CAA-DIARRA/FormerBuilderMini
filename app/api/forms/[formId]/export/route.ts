@@ -4,7 +4,7 @@ import { LABELS } from "../../../../lib/labels";
 
 const prisma = new PrismaClient();
 
-// --- QuickChart via POST (compatible Render)
+// --- QuickChart POST (compatible Render)
 async function fetchChartBase64Post(config: object, width = 1200, height = 550): Promise<string | null> {
   try {
     const resp = await fetch("https://quickchart.io/chart", {
@@ -136,9 +136,8 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     makeHeader("Formateur");
     writeCriteriaBlock(formRows);
 
-    // === GRAPHIQUE CONTENU ===
+    // === FEUILLE GRAPHIQUE CONTENU ===
     const ws2 = wb.addWorksheet("GRAPHIQUE CONTENU");
-
     const contLabels = [...contRows.map((r: any) => r.label), " ", " "];
     const contAvgs = [
       ...contRows.map((r: any) => {
@@ -154,13 +153,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       data: {
         labels: contLabels,
         datasets: [
-          {
-            label: "Moyenne",
-            data: contAvgs,
-            backgroundColor: contAvgs.map((_, i) =>
-              i >= contAvgs.length - 2 ? "rgba(0,0,0,0)" : "#1A73E8"
-            ),
-          },
+          { label: "Moyenne", data: contAvgs, backgroundColor: "#1A73E8" },
           {
             label: "Seuil",
             data: contLabels.map(() => seuil),
@@ -173,14 +166,8 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       },
       options: {
         indexAxis: "y",
-        plugins: {
-          legend: { display: false },
-          title: { display: true, text: "GRAPHIQUE CONTENU" },
-        },
-        scales: {
-          x: { min: 0, max: 5, beginAtZero: true, ticks: { stepSize: 1 } },
-          y: { beginAtZero: true },
-        },
+        plugins: { legend: { display: false }, title: { display: true, text: "GRAPHIQUE CONTENU" } },
+        scales: { x: { min: 0, max: 5, ticks: { stepSize: 1 } }, y: { beginAtZero: true } },
       },
     };
 
@@ -188,25 +175,17 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     if (base641) {
       const imgId = wb.addImage({ base64: base641, extension: "png" });
       ws2.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
-
-      const legendRow = ws2.addRow([
-        "Légende : Très bien : 4    Bien : 3    Passable : 2    Mauvais : 1    Cible : 3",
-      ]);
-      // Appliquer le rouge uniquement sur "Cible : 3"
-      const cell = legendRow.getCell(1);
-      const fullText = cell.value as string;
-      const cibleIndex = fullText.indexOf("Cible");
-      if (cibleIndex >= 0) {
-        cell.richText = [
-          { text: fullText.substring(0, cibleIndex), font: { color: { argb: "FF000000" } } },
+      const legend = ws2.addRow([]);
+      legend.getCell(1).value = {
+        richText: [
+          { text: "Légende : Très bien : 4    Bien : 3    Passable : 2    Mauvais : 1    ", font: { color: { argb: "FF000000" } } },
           { text: "Cible : 3", font: { color: { argb: "FFE53935" }, bold: true } },
-        ];
-      }
+        ],
+      };
     } else ws2.addRow(["Erreur de génération du graphique"]);
 
-    // === GRAPHIQUE FORMATEUR ===
+    // === FEUILLE GRAPHIQUE FORMATEUR ===
     const ws3 = wb.addWorksheet("GRAPHIQUE FORMATEUR");
-
     const formLabels = [...formRows.map((r: any) => r.label), " ", " "];
     const formAvgs = [
       ...formRows.map((r: any) => {
@@ -222,13 +201,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       data: {
         labels: formLabels,
         datasets: [
-          {
-            label: "Moyenne",
-            data: formAvgs,
-            backgroundColor: formAvgs.map((_, i) =>
-              i >= formAvgs.length - 2 ? "rgba(0,0,0,0)" : "#1A73E8"
-            ),
-          },
+          { label: "Moyenne", data: formAvgs, backgroundColor: "#1A73E8" },
           {
             label: "Seuil",
             data: formLabels.map(() => seuil),
@@ -241,14 +214,8 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       },
       options: {
         indexAxis: "y",
-        plugins: {
-          legend: { display: false },
-          title: { display: true, text: "GRAPHIQUE FORMATEUR" },
-        },
-        scales: {
-          x: { min: 0, max: 5, beginAtZero: true, ticks: { stepSize: 1 } },
-          y: { beginAtZero: true },
-        },
+        plugins: { legend: { display: false }, title: { display: true, text: "GRAPHIQUE FORMATEUR" } },
+        scales: { x: { min: 0, max: 5, ticks: { stepSize: 1 } }, y: { beginAtZero: true } },
       },
     };
 
@@ -256,22 +223,16 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     if (base642) {
       const imgId = wb.addImage({ base64: base642, extension: "png" });
       ws3.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
-
-      const legendRow = ws3.addRow([
-        "Légende : Très bien : 4    Bien : 3    Passable : 2    Mauvais : 1    Cible : 3",
-      ]);
-      const cell = legendRow.getCell(1);
-      const fullText = cell.value as string;
-      const cibleIndex = fullText.indexOf("Cible");
-      if (cibleIndex >= 0) {
-        cell.richText = [
-          { text: fullText.substring(0, cibleIndex), font: { color: { argb: "FF000000" } } },
+      const legend = ws3.addRow([]);
+      legend.getCell(1).value = {
+        richText: [
+          { text: "Légende : Très bien : 4    Bien : 3    Passable : 2    Mauvais : 1    ", font: { color: { argb: "FF000000" } } },
           { text: "Cible : 3", font: { color: { argb: "FFE53935" }, bold: true } },
-        ];
-      }
+        ],
+      };
     } else ws3.addRow(["Erreur de génération du graphique"]);
 
-    // === CAMEMBERT ATTENTES ===
+    // === FEUILLE ATTENTES ===
     const ws4 = wb.addWorksheet("ATTENTES");
     const resAtt = participants.map((p) => p.reponduAttentes || "");
     const countOui = resAtt.filter((x) => x === "OUI").length;
@@ -280,16 +241,8 @@ export async function GET(req: Request, { params }: { params: { formId: string }
 
     const pieCfg = {
       type: "pie",
-      data: {
-        labels: ["OUI", "PARTIELLEMENT", "NON"],
-        datasets: [{ data: [countOui, countPartiel, countNon] }],
-      },
-      options: {
-        plugins: {
-          legend: { position: "bottom" },
-          title: { display: true, text: "ATTENTES" },
-        },
-      },
+      data: { labels: ["OUI", "PARTIELLEMENT", "NON"], datasets: [{ data: [countOui, countPartiel, countNon] }] },
+      options: { plugins: { legend: { position: "bottom" }, title: { display: true, text: "ATTENTES" } } },
     };
 
     const base64Pie = await fetchChartBase64Post(pieCfg, 800, 480);
