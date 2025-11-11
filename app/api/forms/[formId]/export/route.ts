@@ -1,4 +1,3 @@
-// app/api/forms/[formId]/export/route.ts
 import { PrismaClient } from "@prisma/client";
 import ExcelJS from "exceljs";
 import { LABELS } from "../../../../lib/labels";
@@ -137,7 +136,7 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     makeHeader("Formateur");
     writeCriteriaBlock(formRows);
 
-    // === FEUILLE 2 — GRAPHIQUE CONTENU ===
+    // === GRAPHIQUE CONTENU ===
     const ws2 = wb.addWorksheet("GRAPHIQUE CONTENU");
 
     const contLabels = [...contRows.map((r: any) => r.label), " ", " "];
@@ -161,16 +160,9 @@ export async function GET(req: Request, { params }: { params: { formId: string }
             backgroundColor: contAvgs.map((_, i) =>
               i >= contAvgs.length - 2 ? "rgba(0,0,0,0)" : "#1A73E8"
             ),
-            datalabels: {
-              color: "#000",
-              anchor: "end",
-              align: "end",
-              formatter: (v: number, ctx: any) =>
-                ctx.dataIndex >= contAvgs.length - 2 ? "" : v.toFixed(2),
-            },
           },
           {
-            label: `Seuil ${seuil}`,
+            label: "Seuil",
             data: contLabels.map(() => seuil),
             type: "line",
             borderColor: "#E53935",
@@ -182,18 +174,11 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       options: {
         indexAxis: "y",
         plugins: {
-          legend: { position: "bottom" },
+          legend: { display: false },
           title: { display: true, text: "GRAPHIQUE CONTENU" },
-          datalabels: { font: { size: 12, weight: "bold" } },
         },
         scales: {
-          x: {
-            min: 0,
-            max: 5,
-            beginAtZero: true,
-            ticks: { stepSize: 1 },
-            grace: 0,
-          },
+          x: { min: 0, max: 5, beginAtZero: true, ticks: { stepSize: 1 } },
           y: { beginAtZero: true },
         },
       },
@@ -203,9 +188,23 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     if (base641) {
       const imgId = wb.addImage({ base64: base641, extension: "png" });
       ws2.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
+
+      const legendRow = ws2.addRow([
+        "Légende : Très bien : 4    Bien : 3    Passable : 2    Mauvais : 1    Cible : 3",
+      ]);
+      // Appliquer le rouge uniquement sur "Cible : 3"
+      const cell = legendRow.getCell(1);
+      const fullText = cell.value as string;
+      const cibleIndex = fullText.indexOf("Cible");
+      if (cibleIndex >= 0) {
+        cell.richText = [
+          { text: fullText.substring(0, cibleIndex), font: { color: { argb: "FF000000" } } },
+          { text: "Cible : 3", font: { color: { argb: "FFE53935" }, bold: true } },
+        ];
+      }
     } else ws2.addRow(["Erreur de génération du graphique"]);
 
-    // === FEUILLE 3 — GRAPHIQUE FORMATEUR ===
+    // === GRAPHIQUE FORMATEUR ===
     const ws3 = wb.addWorksheet("GRAPHIQUE FORMATEUR");
 
     const formLabels = [...formRows.map((r: any) => r.label), " ", " "];
@@ -229,16 +228,9 @@ export async function GET(req: Request, { params }: { params: { formId: string }
             backgroundColor: formAvgs.map((_, i) =>
               i >= formAvgs.length - 2 ? "rgba(0,0,0,0)" : "#1A73E8"
             ),
-            datalabels: {
-              color: "#000",
-              anchor: "end",
-              align: "end",
-              formatter: (v: number, ctx: any) =>
-                ctx.dataIndex >= formAvgs.length - 2 ? "" : v.toFixed(2),
-            },
           },
           {
-            label: `Seuil ${seuil}`,
+            label: "Seuil",
             data: formLabels.map(() => seuil),
             type: "line",
             borderColor: "#E53935",
@@ -250,18 +242,11 @@ export async function GET(req: Request, { params }: { params: { formId: string }
       options: {
         indexAxis: "y",
         plugins: {
-          legend: { position: "bottom" },
+          legend: { display: false },
           title: { display: true, text: "GRAPHIQUE FORMATEUR" },
-          datalabels: { font: { size: 12, weight: "bold" } },
         },
         scales: {
-          x: {
-            min: 0,
-            max: 5,
-            beginAtZero: true,
-            ticks: { stepSize: 1 },
-            grace: 0,
-          },
+          x: { min: 0, max: 5, beginAtZero: true, ticks: { stepSize: 1 } },
           y: { beginAtZero: true },
         },
       },
@@ -271,9 +256,22 @@ export async function GET(req: Request, { params }: { params: { formId: string }
     if (base642) {
       const imgId = wb.addImage({ base64: base642, extension: "png" });
       ws3.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1200, height: 520 } });
+
+      const legendRow = ws3.addRow([
+        "Légende : Très bien : 4    Bien : 3    Passable : 2    Mauvais : 1    Cible : 3",
+      ]);
+      const cell = legendRow.getCell(1);
+      const fullText = cell.value as string;
+      const cibleIndex = fullText.indexOf("Cible");
+      if (cibleIndex >= 0) {
+        cell.richText = [
+          { text: fullText.substring(0, cibleIndex), font: { color: { argb: "FF000000" } } },
+          { text: "Cible : 3", font: { color: { argb: "FFE53935" }, bold: true } },
+        ];
+      }
     } else ws3.addRow(["Erreur de génération du graphique"]);
 
-    // === FEUILLE 4 — CAMEMBERT ATTENTES ===
+    // === CAMEMBERT ATTENTES ===
     const ws4 = wb.addWorksheet("ATTENTES");
     const resAtt = participants.map((p) => p.reponduAttentes || "");
     const countOui = resAtt.filter((x) => x === "OUI").length;
