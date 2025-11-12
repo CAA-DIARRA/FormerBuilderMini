@@ -1,13 +1,13 @@
 // app/f/[slug]/page.tsx
 import { PrismaClient } from "@prisma/client";
 import { notFound } from "next/navigation";
-import dynamic from "next/dynamic";
+import nextDynamic from "next/dynamic"; // ✅ renommé ici
 
-const ClientPublicForm = dynamic(() => import("./page.client"), {
-  ssr: false, // ✅ crucial : on ne réexécute pas côté serveur à chaque frappe
+const ClientPublicForm = nextDynamic(() => import("./page.client"), {
+  ssr: false, // ✅ on désactive le rendu serveur pour ce composant
 });
 
-export const dynamic = "force-dynamic";
+export const dynamicMode = "force-dynamic"; // ✅ renommé pour éviter le conflit
 export const runtime = "nodejs";
 
 const prisma = new PrismaClient();
@@ -23,8 +23,6 @@ export default async function PublicFormPage({
   if (!form) return notFound();
 
   const serverLang: "fr" | "en" = searchParams?.lang === "en" ? "en" : "fr";
-
-  // figer les données du form
   const frozenForm = JSON.parse(JSON.stringify(form));
 
   if (searchParams?.debug === "1") {
@@ -47,6 +45,6 @@ export default async function PublicFormPage({
     );
   }
 
-  // ✅ le client est monté une seule fois, ne re-render plus à chaque frappe
+  // ✅ Composant client unique, plus de remount à chaque frappe
   return <ClientPublicForm form={frozenForm} serverLang={serverLang} />;
 }
