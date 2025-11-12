@@ -1,11 +1,8 @@
-// app/components/FormClient.tsx
 "use client";
 
 import React, { memo, useMemo, useState } from "react";
 
 type Lang = "fr" | "en";
-
-// ordre 4 → 3 → 2 → 1 (comme demandé)
 const scale = [4, 3, 2, 1];
 
 type FormDto = {
@@ -13,7 +10,7 @@ type FormDto = {
   slug: string;
   title?: string | null;
   trainerName?: string | null;
-  sessionDate?: string | null; // ISO string
+  sessionDate?: string | null;
   location?: string | null;
   isOpen: boolean;
 };
@@ -24,7 +21,7 @@ type Props = {
 };
 
 function FormClientInner({ form, lang = "fr" }: Props) {
-  // Libellés multilingues
+  // 🌍 Libellés multilingues mis à jour (PARTIELLEMENT supprimé)
   const T = useMemo(() => {
     if (lang === "en") {
       return {
@@ -64,21 +61,21 @@ function FormClientInner({ form, lang = "fr" }: Props) {
 
         synthTitle: "Summary",
         synthQ: "Did this training meet your expectations?",
-        opts: ["YES", "PARTLY", "NO"],
+        opts: ["YES", "NO"], // ✅ PARTLY supprimé
 
         extraTitle: "Additional courses & Testimonial",
         extraQ1: "What complementary training would you consider?",
         extraQ2: "What testimonial can you leave about this training?",
         consent: "I authorize the publication of my testimonial",
 
-        // en-têtes au-dessus des radios (4→1)
         scaleH: ["Very good (4)", "Good (3)", "Fair (2)", "Poor (1)"],
-
         send: "Submit",
         ok: "Thank you for your feedback!",
         ko: "An error occurred while submitting.",
       };
     }
+
+    // 🇫🇷 Français
     return {
       pageTitle: form?.title ?? "Évaluation de formation",
       headerLine: (d: string) =>
@@ -116,7 +113,7 @@ function FormClientInner({ form, lang = "fr" }: Props) {
 
       synthTitle: "Synthèse",
       synthQ: "Cette formation a-t-elle répondu à vos attentes ?",
-      opts: ["OUI", "PARTIELLEMENT", "NON"],
+      opts: ["OUI", "NON"], // ✅ PARTIELLEMENT supprimé
 
       extraTitle: "Compléments & Témoignage",
       extraQ1: "Quelles formations complémentaires envisagez-vous ?",
@@ -124,14 +121,12 @@ function FormClientInner({ form, lang = "fr" }: Props) {
       consent: "J’autorise la publication de mon témoignage",
 
       scaleH: ["Très bien (4)", "Bien (3)", "Passable (2)", "Mauvais (1)"],
-
       send: "Envoyer",
       ok: "Merci pour votre retour !",
       ko: "Une erreur est survenue lors de l’envoi.",
     };
   }, [lang, form?.title, form?.trainerName, form?.location]);
 
-  // State contrôlé (initialisé une seule fois)
   const [loading, setLoading] = useState(false);
   const [vals, setVals] = useState<any>({
     participantNom: "",
@@ -158,14 +153,13 @@ function FormClientInner({ form, lang = "fr" }: Props) {
     formMethodo: 4,
     formGlobal: 4,
 
-    reponduAttentes: lang === "en" ? "YES" : "OUI",
+    reponduAttentes: lang === "en" ? "YES" : "OUI", // ✅ valeur par défaut sans PARTLY
     formationsComplementaires: "",
     temoignage: "",
     consentementTemoignage: false,
   });
 
-  const safeDate =
-    form?.sessionDate ? new Date(form.sessionDate).toLocaleDateString() : "";
+  const safeDate = form?.sessionDate ? new Date(form.sessionDate).toLocaleDateString() : "";
 
   const send = async () => {
     try {
@@ -177,12 +171,7 @@ function FormClientInner({ form, lang = "fr" }: Props) {
       });
       if (!res.ok) throw new Error("submit_failed");
       alert(T.ok);
-      // reset doux
-      setVals((s: any) => ({
-        ...s,
-        formationsComplementaires: "",
-        temoignage: "",
-      }));
+      setVals((s: any) => ({ ...s, formationsComplementaires: "", temoignage: "" }));
     } catch {
       alert(T.ko);
     } finally {
@@ -197,7 +186,6 @@ function FormClientInner({ form, lang = "fr" }: Props) {
     </section>
   );
 
-  // entête au-dessus des 4 radios (ordre 4→1)
   const ScaleHeader = () => (
     <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs text-neutral-600">
       <div className="col-span-2" />
@@ -209,7 +197,6 @@ function FormClientInner({ form, lang = "fr" }: Props) {
     </div>
   );
 
-  // une ligne de radios (ordre 4→1)
   const RadioRow = ({ label, name }: { label: string; name: keyof typeof vals }) => (
     <div className="grid grid-cols-2 md:grid-cols-6 items-center gap-2">
       <div className="col-span-2">{label}</div>
@@ -319,15 +306,13 @@ function FormClientInner({ form, lang = "fr" }: Props) {
         </div>
       </Section>
 
-      {/* COMPLEMENTS / TEMOIGNAGE */}
+      {/* COMPLEMENTS */}
       <Section title={T.extraTitle}>
         <textarea
           className="w-full border rounded-xl p-2"
           placeholder={T.extraQ1}
           value={vals.formationsComplementaires}
-          onChange={(e) =>
-            setVals((s: any) => ({ ...s, formationsComplementaires: e.target.value }))
-          }
+          onChange={(e) => setVals((s: any) => ({ ...s, formationsComplementaires: e.target.value }))}
         />
         <textarea
           className="w-full border rounded-xl p-2"
@@ -339,9 +324,7 @@ function FormClientInner({ form, lang = "fr" }: Props) {
           <input
             type="checkbox"
             checked={vals.consentementTemoignage}
-            onChange={(e) =>
-              setVals((s: any) => ({ ...s, consentementTemoignage: e.target.checked }))
-            }
+            onChange={(e) => setVals((s: any) => ({ ...s, consentementTemoignage: e.target.checked }))}
           />
           <span>{T.consent}</span>
         </label>
@@ -358,5 +341,4 @@ function FormClientInner({ form, lang = "fr" }: Props) {
   );
 }
 
-// Empêche les re-render/remounts inutiles quand les props ne changent pas réellement
 export default memo(FormClientInner);
