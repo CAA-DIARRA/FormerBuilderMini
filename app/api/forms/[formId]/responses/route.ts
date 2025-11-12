@@ -1,4 +1,3 @@
-// app/api/forms/[formId]/responses/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
@@ -21,18 +20,21 @@ const toBool = (v: unknown): boolean | undefined => {
   const s = String(v).trim().toLowerCase();
   if (["true", "1", "on", "yes"].includes(s)) return true;
   if (["false", "0", "off", "no"].includes(s)) return false;
-  // si c'est déjà un bool
   if (typeof v === "boolean") return v;
   return undefined;
 };
 
-// YES/PARTIALLY/NO -> OUI/PARTIELLEMENT/NON
+// ✅ YES/PARTIALLY/NO -> OUI/NON (PARTIELLEMENT supprimé)
 const normExpectation = (v: unknown) => {
   if (v === undefined || v === null || v === "") return undefined;
   const s = String(v).trim().toUpperCase();
+
   if (["OUI", "O", "YES", "Y"].includes(s)) return "OUI" as const;
-  if (["PARTIELLEMENT", "PARTIEL", "PARTIALLY", "PARTIAL"].includes(s)) return "PARTIELLEMENT" as const;
   if (["NON", "NO", "N"].includes(s)) return "NON" as const;
+
+  // ❌ "PARTIELLEMENT" ou "PARTIALLY" => ignoré
+  if (["PARTIELLEMENT", "PARTIEL", "PARTIALLY", "PARTIAL"].includes(s)) return undefined;
+
   return undefined;
 };
 
@@ -41,43 +43,41 @@ const normExpectation = (v: unknown) => {
 // Likert 1..5 (accepte string ou number)
 const Likert = z.preprocess(toInt, z.number().int().min(1).max(5));
 
-const Body = z.object({
-  participantNom: z.string().max(120).trim().optional(),
-  participantPrenoms: z.string().max(120).trim().optional(),
-  participantFonction: z.string().max(120).trim().optional(),
-  participantEntreprise: z.string().max(240).trim().optional(),
+const Body = z
+  .object({
+    participantNom: z.string().max(120).trim().optional(),
+    participantPrenoms: z.string().max(120).trim().optional(),
+    participantFonction: z.string().max(120).trim().optional(),
+    participantEntreprise: z.string().max(240).trim().optional(),
 
-  envAccueil: Likert.optional(),
-  envLieu: Likert.optional(),
-  envMateriel: Likert.optional(),
-  envAmeliorations: z.string().max(5000).trim().optional(),
+    envAccueil: Likert.optional(),
+    envLieu: Likert.optional(),
+    envMateriel: Likert.optional(),
+    envAmeliorations: z.string().max(5000).trim().optional(),
 
-  contAttentes: Likert.optional(),
-  contUtiliteTravail: Likert.optional(),
-  contExercices: Likert.optional(),
-  contMethodologie: Likert.optional(),
-  contSupports: Likert.optional(),
-  contRythme: Likert.optional(),
-  contGlobal: Likert.optional(),
+    contAttentes: Likert.optional(),
+    contUtiliteTravail: Likert.optional(),
+    contExercices: Likert.optional(),
+    contMethodologie: Likert.optional(),
+    contSupports: Likert.optional(),
+    contRythme: Likert.optional(),
+    contGlobal: Likert.optional(),
 
-  formMaitrise: Likert.optional(),
-  formCommunication: Likert.optional(),
-  formClarte: Likert.optional(),
-  formMethodo: Likert.optional(),
-  formGlobal: Likert.optional(),
+    formMaitrise: Likert.optional(),
+    formCommunication: Likert.optional(),
+    formClarte: Likert.optional(),
+    formMethodo: Likert.optional(),
+    formGlobal: Likert.optional(),
 
-  // on accepte EN ou FR puis on normalise dans refine()
-  reponduAttentes: z.any().optional(),
-  formationsComplementaires: z.string().max(5000).trim().optional(),
-  temoignage: z.string().max(5000).trim().optional(),
-  consentementTemoignage: z.preprocess(toBool, z.boolean().optional()),
-}).transform((raw) => {
-  // normalisation finale des champs spéciaux
-  return {
+    reponduAttentes: z.any().optional(),
+    formationsComplementaires: z.string().max(5000).trim().optional(),
+    temoignage: z.string().max(5000).trim().optional(),
+    consentementTemoignage: z.preprocess(toBool, z.boolean().optional()),
+  })
+  .transform((raw) => ({
     ...raw,
     reponduAttentes: normExpectation(raw.reponduAttentes),
-  };
-});
+  }));
 
 /* ------------------------------ Handler ------------------------------- */
 
@@ -85,11 +85,12 @@ export async function POST(req: NextRequest, { params }: { params: { formId: str
   try {
     const parsed = Body.parse(await req.json());
 
-    // Hash IP & User-Agent
+    // 🔐 Hash IP & User-Agent
     const ua = req.headers.get("user-agent") ?? undefined;
     const ip = req.headers.get("x-forwarded-for") ?? "";
     const ipHash = ip ? crypto.createHash("sha256").update(ip).digest("hex") : undefined;
 
+    // ✅ Enregistrement Prisma (sans "PARTIELLEMENT")
     const created = await prisma.response.create({
       data: {
         formId: params.formId,
@@ -120,7 +121,7 @@ export async function POST(req: NextRequest, { params }: { params: { formId: str
         formMethodo: parsed.formMethodo ?? null,
         formGlobal: parsed.formGlobal ?? null,
 
-        reponduAttentes: parsed.reponduAttentes ?? null,
+        reponduAttentes: parsed.reponduAttentes ?? null, // ✅ “PARTIELLEMENT” jamais enregistré
         formationsComplementaires: parsed.formationsComplementaires ?? null,
         temoignage: parsed.temoignage ?? null,
         consentementTemoignage: parsed.consentementTemoignage ?? null,
@@ -129,7 +130,7 @@ export async function POST(req: NextRequest, { params }: { params: { formId: str
 
     return NextResponse.json({ id: created.id }, { status: 201 });
   } catch (err: any) {
-    // remonte une erreur lisible côté client
+    console.error("Error submitting form:", err);
     const message = err?.issues?.[0]?.message || err?.message || "submit_failed";
     return NextResponse.json({ error: message }, { status: 400 });
   }
