@@ -1,6 +1,6 @@
 "use client";
 
-import React, { memo, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 
 type Lang = "fr" | "en";
 const scale = [4, 3, 2, 1];
@@ -20,8 +20,8 @@ type Props = {
   lang?: Lang;
 };
 
-function FormClientInner({ form, lang = "fr" }: Props) {
-  // 🌍 Libellés multilingues mis à jour (PARTIELLEMENT supprimé)
+export default function FormClient({ form, lang = "fr" }: Props) {
+  // ====== Traductions ======
   const T = useMemo(() => {
     if (lang === "en") {
       return {
@@ -30,7 +30,6 @@ function FormClientInner({ form, lang = "fr" }: Props) {
           `Trainer: ${form?.trainerName ?? ""} • Date: ${d} • Location: ${form?.location ?? ""}`,
         participant: "PARTICIPANT",
         fields: { lastName: "Last name", firstNames: "First names", role: "Role", company: "Company" },
-
         envTitle: "I. Training environment",
         env: {
           accueil: "1. How did you find the welcome/reception?",
@@ -38,7 +37,6 @@ function FormClientInner({ form, lang = "fr" }: Props) {
           materiel: "3. How did you find the equipment provided?",
           ameliors: "4. Your suggestions for improvement",
         },
-
         contTitle: "II. Training content",
         cont: {
           attentes: "1. Does the content meet your expectations?",
@@ -49,7 +47,6 @@ function FormClientInner({ form, lang = "fr" }: Props) {
           rythme: "6. How did you find the training pace?",
           global: "Overall evaluation of the training",
         },
-
         formTitle: "III. Trainer(s)",
         formSec: {
           maitrise: "1. Mastery of the subject",
@@ -58,16 +55,13 @@ function FormClientInner({ form, lang = "fr" }: Props) {
           methodo: "4. Mastery of the training methodology",
           global: "5. Overall evaluation of the trainer",
         },
-
         synthTitle: "Summary",
         synthQ: "Did this training meet your expectations?",
-        opts: ["YES", "NO"], // ✅ PARTLY supprimé
-
+        opts: ["YES", "NO"],
         extraTitle: "Additional courses & Testimonial",
         extraQ1: "What complementary training would you consider?",
         extraQ2: "What testimonial can you leave about this training?",
         consent: "I authorize the publication of my testimonial",
-
         scaleH: ["Very good (4)", "Good (3)", "Fair (2)", "Poor (1)"],
         send: "Submit",
         ok: "Thank you for your feedback!",
@@ -75,14 +69,12 @@ function FormClientInner({ form, lang = "fr" }: Props) {
       };
     }
 
-    // 🇫🇷 Français
     return {
       pageTitle: form?.title ?? "Évaluation de formation",
       headerLine: (d: string) =>
         `Formateur : ${form?.trainerName ?? ""} • Date : ${d} • Lieu : ${form?.location ?? ""}`,
       participant: "PARTICIPANT",
       fields: { lastName: "Nom", firstNames: "Prénoms", role: "Fonction", company: "Entreprise" },
-
       envTitle: "I. L’environnement de la formation",
       env: {
         accueil: "1. Comment avez-vous trouvé l’Accueil ?",
@@ -90,7 +82,6 @@ function FormClientInner({ form, lang = "fr" }: Props) {
         materiel: "3. Comment avez-vous trouvé le Matériel mis à disposition ?",
         ameliors: "4. Vos propositions d’amélioration",
       },
-
       contTitle: "II. Le Contenu de la formation",
       cont: {
         attentes: "1. Le contenu couvre-t-il vos attentes ?",
@@ -99,9 +90,8 @@ function FormClientInner({ form, lang = "fr" }: Props) {
         methodo: "4. Comment avez-vous trouvé la méthodologie utilisée pour la formation ?",
         supports: "5. Comment avez-vous trouvé les supports de la formation ?",
         rythme: "6. Comment avez-vous trouvé le rythme de la formation ?",
-        global: "7 Évaluation globale de la formation",
+        global: "Évaluation globale de la formation",
       },
-
       formTitle: "III. Le(s) Formateur(s)",
       formSec: {
         maitrise: "1. Maîtrise du sujet",
@@ -110,16 +100,13 @@ function FormClientInner({ form, lang = "fr" }: Props) {
         methodo: "4. Maîtrise méthodologie de la formation",
         global: "5. Évaluation globale du formateur",
       },
-
       synthTitle: "Synthèse",
       synthQ: "Cette formation a-t-elle répondu à vos attentes ?",
-      opts: ["OUI", "NON"], // ✅ PARTIELLEMENT supprimé
-
+      opts: ["OUI", "NON"],
       extraTitle: "Compléments & Témoignage",
       extraQ1: "Quelles formations complémentaires envisagez-vous ?",
       extraQ2: "Quel témoignage pouvez-vous laisser de cette formation ?",
       consent: "J’autorise la publication de mon témoignage",
-
       scaleH: ["Très bien (4)", "Bien (3)", "Passable (2)", "Mauvais (1)"],
       send: "Envoyer",
       ok: "Merci pour votre retour !",
@@ -127,18 +114,20 @@ function FormClientInner({ form, lang = "fr" }: Props) {
     };
   }, [lang, form?.title, form?.trainerName, form?.location]);
 
-  const [loading, setLoading] = useState(false);
-  const [vals, setVals] = useState<any>({
-    participantNom: "",
-    participantPrenoms: "",
-    participantFonction: "",
-    participantEntreprise: "",
+  // ====== États indépendants (pour éviter les re-render globaux) ======
+  const [participantNom, setParticipantNom] = useState("");
+  const [participantPrenoms, setParticipantPrenoms] = useState("");
+  const [participantFonction, setParticipantFonction] = useState("");
+  const [participantEntreprise, setParticipantEntreprise] = useState("");
+  const [envAmeliorations, setEnvAmeliorations] = useState("");
+  const [formationsComplementaires, setFormationsComplementaires] = useState("");
+  const [temoignage, setTemoignage] = useState("");
+  const [consentementTemoignage, setConsentementTemoignage] = useState(false);
 
+  const [notes, setNotes] = useState({
     envAccueil: 4,
     envLieu: 4,
     envMateriel: 4,
-    envAmeliorations: "",
-
     contAttentes: 4,
     contUtiliteTravail: 4,
     contExercices: 4,
@@ -146,32 +135,44 @@ function FormClientInner({ form, lang = "fr" }: Props) {
     contSupports: 4,
     contRythme: 4,
     contGlobal: 4,
-
     formMaitrise: 4,
     formCommunication: 4,
     formClarte: 4,
     formMethodo: 4,
     formGlobal: 4,
-
-    reponduAttentes: lang === "en" ? "YES" : "OUI", // ✅ valeur par défaut sans PARTLY
-    formationsComplementaires: "",
-    temoignage: "",
-    consentementTemoignage: false,
   });
+
+  const updateNote = (key: keyof typeof notes, value: number) => {
+    setNotes((prev) => (prev[key] === value ? prev : { ...prev, [key]: value }));
+  };
+
+  const [reponduAttentes, setReponduAttentes] = useState(lang === "en" ? "YES" : "OUI");
+  const [loading, setLoading] = useState(false);
 
   const safeDate = form?.sessionDate ? new Date(form.sessionDate).toLocaleDateString() : "";
 
+  // ====== Envoi ======
   const send = async () => {
     try {
       setLoading(true);
       const res = await fetch(`/api/forms/${form?.id}/responses`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(vals),
+        body: JSON.stringify({
+          participantNom,
+          participantPrenoms,
+          participantFonction,
+          participantEntreprise,
+          envAmeliorations,
+          formationsComplementaires,
+          temoignage,
+          consentementTemoignage,
+          reponduAttentes,
+          ...notes,
+        }),
       });
       if (!res.ok) throw new Error("submit_failed");
       alert(T.ok);
-      setVals((s: any) => ({ ...s, formationsComplementaires: "", temoignage: "" }));
     } catch {
       alert(T.ko);
     } finally {
@@ -179,6 +180,7 @@ function FormClientInner({ form, lang = "fr" }: Props) {
     }
   };
 
+  // ====== Composants ======
   const Section = ({ title, children }: React.PropsWithChildren<{ title: string }>) => (
     <section className="border rounded-2xl p-4 space-y-4 bg-white">
       <h2 className="text-lg font-semibold">{title}</h2>
@@ -189,7 +191,7 @@ function FormClientInner({ form, lang = "fr" }: Props) {
   const ScaleHeader = () => (
     <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs text-neutral-600">
       <div className="col-span-2" />
-      {T.scaleH.map((h: string) => (
+      {T.scaleH.map((h) => (
         <div key={h} className="text-center">
           {h}
         </div>
@@ -197,22 +199,23 @@ function FormClientInner({ form, lang = "fr" }: Props) {
     </div>
   );
 
-  const RadioRow = ({ label, name }: { label: string; name: keyof typeof vals }) => (
+  const RadioRow = ({ label, name }: { label: string; name: keyof typeof notes }) => (
     <div className="grid grid-cols-2 md:grid-cols-6 items-center gap-2">
       <div className="col-span-2">{label}</div>
       {scale.map((v) => (
-        <label key={`${String(name)}-${v}`} className="flex items-center justify-center gap-1">
+        <label key={`${name}-${v}`} className="flex items-center justify-center gap-1">
           <input
             type="radio"
-            name={name as string}
-            checked={vals[name] === v}
-            onChange={() => setVals((s: any) => ({ ...s, [name]: v }))}
+            name={name}
+            checked={notes[name] === v}
+            onChange={() => updateNote(name, v)}
           />
         </label>
       ))}
     </div>
   );
 
+  // ====== Rendu ======
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-6">
       <header className="space-y-1">
@@ -223,70 +226,50 @@ function FormClientInner({ form, lang = "fr" }: Props) {
       {/* PARTICIPANT */}
       <Section title={T.participant}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <input
-            className="border rounded-xl p-2"
-            placeholder={T.fields.lastName}
-            value={vals.participantNom}
-            onChange={(e) => setVals((s: any) => ({ ...s, participantNom: e.target.value }))}
-          />
-          <input
-            className="border rounded-xl p-2"
-            placeholder={T.fields.firstNames}
-            value={vals.participantPrenoms}
-            onChange={(e) => setVals((s: any) => ({ ...s, participantPrenoms: e.target.value }))}
-          />
-          <input
-            className="border rounded-xl p-2"
-            placeholder={T.fields.role}
-            value={vals.participantFonction}
-            onChange={(e) => setVals((s: any) => ({ ...s, participantFonction: e.target.value }))}
-          />
-          <input
-            className="border rounded-xl p-2"
-            placeholder={T.fields.company}
-            value={vals.participantEntreprise}
-            onChange={(e) => setVals((s: any) => ({ ...s, participantEntreprise: e.target.value }))}
-          />
+          <input className="border rounded-xl p-2" placeholder={T.fields.lastName}
+            value={participantNom} onChange={(e) => setParticipantNom(e.target.value)} />
+          <input className="border rounded-xl p-2" placeholder={T.fields.firstNames}
+            value={participantPrenoms} onChange={(e) => setParticipantPrenoms(e.target.value)} />
+          <input className="border rounded-xl p-2" placeholder={T.fields.role}
+            value={participantFonction} onChange={(e) => setParticipantFonction(e.target.value)} />
+          <input className="border rounded-xl p-2" placeholder={T.fields.company}
+            value={participantEntreprise} onChange={(e) => setParticipantEntreprise(e.target.value)} />
         </div>
       </Section>
 
       {/* ENVIRONNEMENT */}
       <Section title={T.envTitle}>
         <ScaleHeader />
-        <RadioRow label={T.env.accueil} name={"envAccueil"} />
-        <RadioRow label={T.env.lieux} name={"envLieu"} />
-        <RadioRow label={T.env.materiel} name={"envMateriel"} />
-        <textarea
-          className="w-full border rounded-xl p-2"
-          placeholder={T.env.ameliors}
-          value={vals.envAmeliorations}
-          onChange={(e) => setVals((s: any) => ({ ...s, envAmeliorations: e.target.value }))}
-        />
+        <RadioRow label={T.env.accueil} name="envAccueil" />
+        <RadioRow label={T.env.lieux} name="envLieu" />
+        <RadioRow label={T.env.materiel} name="envMateriel" />
+        <textarea className="w-full border rounded-xl p-2" placeholder={T.env.ameliors}
+          value={envAmeliorations} onChange={(e) => setEnvAmeliorations(e.target.value)} />
       </Section>
 
       {/* CONTENU */}
       <Section title={T.contTitle}>
         <ScaleHeader />
-        <RadioRow label={T.cont.attentes} name={"contAttentes"} />
-        <RadioRow label={T.cont.utile} name={"contUtiliteTravail"} />
-        <RadioRow label={T.cont.exos} name={"contExercices"} />
-        <RadioRow label={T.cont.methodo} name={"contMethodologie"} />
-        <RadioRow label={T.cont.supports} name={"contSupports"} />
-        <RadioRow label={T.cont.rythme} name={"contRythme"} />
-        <RadioRow label={T.cont.global} name={"contGlobal"} />
+        <RadioRow label={T.cont.attentes} name="contAttentes" />
+        <RadioRow label={T.cont.utile} name="contUtiliteTravail" />
+        <RadioRow label={T.cont.exos} name="contExercices" />
+        <RadioRow label={T.cont.methodo} name="contMethodologie" />
+        <RadioRow label={T.cont.supports} name="contSupports" />
+        <RadioRow label={T.cont.rythme} name="contRythme" />
+        <RadioRow label={T.cont.global} name="contGlobal" />
       </Section>
 
       {/* FORMATEUR(S) */}
       <Section title={T.formTitle}>
         <ScaleHeader />
-        <RadioRow label={T.formSec.maitrise} name={"formMaitrise"} />
-        <RadioRow label={T.formSec.com} name={"formCommunication"} />
-        <RadioRow label={T.formSec.clarte} name={"formClarte"} />
-        <RadioRow label={T.formSec.methodo} name={"formMethodo"} />
-        <RadioRow label={T.formSec.global} name={"formGlobal"} />
+        <RadioRow label={T.formSec.maitrise} name="formMaitrise" />
+        <RadioRow label={T.formSec.com} name="formCommunication" />
+        <RadioRow label={T.formSec.clarte} name="formClarte" />
+        <RadioRow label={T.formSec.methodo} name="formMethodo" />
+        <RadioRow label={T.formSec.global} name="formGlobal" />
       </Section>
 
-      {/* SYNTHESE */}
+      {/* SYNTHÈSE */}
       <Section title={T.synthTitle}>
         <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
           <span>{T.synthQ}</span>
@@ -296,8 +279,8 @@ function FormClientInner({ form, lang = "fr" }: Props) {
                 <input
                   type="radio"
                   name="reponduAttentes"
-                  checked={vals.reponduAttentes === opt}
-                  onChange={() => setVals((s: any) => ({ ...s, reponduAttentes: opt }))}
+                  checked={reponduAttentes === opt}
+                  onChange={() => setReponduAttentes(opt)}
                 />
                 <span className="text-sm">{opt}</span>
               </label>
@@ -306,26 +289,16 @@ function FormClientInner({ form, lang = "fr" }: Props) {
         </div>
       </Section>
 
-      {/* COMPLEMENTS */}
+      {/* COMPLÉMENTS / TÉMOIGNAGE */}
       <Section title={T.extraTitle}>
-        <textarea
-          className="w-full border rounded-xl p-2"
-          placeholder={T.extraQ1}
-          value={vals.formationsComplementaires}
-          onChange={(e) => setVals((s: any) => ({ ...s, formationsComplementaires: e.target.value }))}
-        />
-        <textarea
-          className="w-full border rounded-xl p-2"
-          placeholder={T.extraQ2}
-          value={vals.temoignage}
-          onChange={(e) => setVals((s: any) => ({ ...s, temoignage: e.target.value }))}
-        />
+        <textarea className="w-full border rounded-xl p-2" placeholder={T.extraQ1}
+          value={formationsComplementaires} onChange={(e) => setFormationsComplementaires(e.target.value)} />
+        <textarea className="w-full border rounded-xl p-2" placeholder={T.extraQ2}
+          value={temoignage} onChange={(e) => setTemoignage(e.target.value)} />
         <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={vals.consentementTemoignage}
-            onChange={(e) => setVals((s: any) => ({ ...s, consentementTemoignage: e.target.checked }))}
-          />
+          <input type="checkbox"
+            checked={consentementTemoignage}
+            onChange={(e) => setConsentementTemoignage(e.target.checked)} />
           <span>{T.consent}</span>
         </label>
       </Section>
@@ -340,5 +313,3 @@ function FormClientInner({ form, lang = "fr" }: Props) {
     </div>
   );
 }
-
-export default memo(FormClientInner);
