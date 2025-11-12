@@ -99,7 +99,7 @@ function FormClientInner({ form, lang = "fr" }: Props) {
         methodo: "4. Comment avez-vous trouvé la méthodologie utilisée pour la formation ?",
         supports: "5. Comment avez-vous trouvé les supports de la formation ?",
         rythme: "6. Comment avez-vous trouvé le rythme de la formation ?",
-        global: "Évaluation globale de la formation",
+        global: "7 Évaluation globale de la formation",
       },
 
       formTitle: "III. Le(s) Formateur(s)",
