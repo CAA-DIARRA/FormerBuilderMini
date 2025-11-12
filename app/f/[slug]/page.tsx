@@ -1,7 +1,11 @@
 // app/f/[slug]/page.tsx
 import { PrismaClient } from "@prisma/client";
 import { notFound } from "next/navigation";
-import PublicFormShell from "../../components/PublicFormShell";
+import dynamic from "next/dynamic";
+
+const ClientPublicForm = dynamic(() => import("./page.client"), {
+  ssr: false, // ✅ crucial : on ne réexécute pas côté serveur à chaque frappe
+});
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,6 +23,9 @@ export default async function PublicFormPage({
   if (!form) return notFound();
 
   const serverLang: "fr" | "en" = searchParams?.lang === "en" ? "en" : "fr";
+
+  // figer les données du form
+  const frozenForm = JSON.parse(JSON.stringify(form));
 
   if (searchParams?.debug === "1") {
     return (
@@ -40,6 +47,6 @@ export default async function PublicFormPage({
     );
   }
 
-  // 🚫 Pas de setState ici, pas de modif d’URL → pas de remount côté saisie
-  return <PublicFormShell form={form} serverLang={serverLang} />;
+  // ✅ le client est monté une seule fois, ne re-render plus à chaque frappe
+  return <ClientPublicForm form={frozenForm} serverLang={serverLang} />;
 }
