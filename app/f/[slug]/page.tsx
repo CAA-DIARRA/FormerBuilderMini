@@ -1,14 +1,16 @@
 // app/f/[slug]/page.tsx
 import { PrismaClient } from "@prisma/client";
 import { notFound } from "next/navigation";
-import nextDynamic from "next/dynamic"; // ✅ on renomme l'import ici
+import nextDynamic from "next/dynamic";
 
-// ✅ Client uniquement (pas SSR)
-const ClientPublicForm = nextDynamic(() => import("./page.client"), {
-  ssr: false,
-});
+// ✅ On indique ici à TypeScript que le composant importé
+//    accepte bien les props { form: any; serverLang: "fr" | "en"; }
+const ClientPublicForm = nextDynamic<{ form: any; serverLang: "fr" | "en" }>(
+  () => import("./page.client"),
+  { ssr: false } // ✅ Empêche le remount côté serveur
+);
 
-export const dynamic = "force-dynamic"; // ✅ Next.js l'accepte
+export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const prisma = new PrismaClient();
@@ -24,7 +26,7 @@ export default async function PublicFormPage({
   if (!form) return notFound();
 
   const serverLang: "fr" | "en" = searchParams?.lang === "en" ? "en" : "fr";
-  const frozenForm = JSON.parse(JSON.stringify(form)); // ✅ éviter les références Prisma
+  const frozenForm = JSON.parse(JSON.stringify(form)); // ✅ pour éviter les références Prisma
 
   if (searchParams?.debug === "1") {
     return (
@@ -46,6 +48,6 @@ export default async function PublicFormPage({
     );
   }
 
-  // ✅ composant client stable, aucun remount pendant la saisie
+  // ✅ composant client stable, sans remount
   return <ClientPublicForm form={frozenForm} serverLang={serverLang} />;
 }
