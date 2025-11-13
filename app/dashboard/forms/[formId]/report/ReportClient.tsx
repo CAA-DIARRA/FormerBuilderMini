@@ -20,19 +20,16 @@ import { useMemo } from "react";
 type Lang = "fr" | "en";
 
 type Resp = {
-  // champs “participant*” facultatifs
   participantNom?: string | null;
   participantPrenoms?: string | null;
   participantFonction?: string | null;
   participantEntreprise?: string | null;
 
-  // ENV
   envAccueil?: number | null;
   envLieu?: number | null;
   envMateriel?: number | null;
   envAmeliorations?: string | null;
 
-  // CONTENU (Likert 1..4)
   contAttentes?: number | null;
   contUtiliteTravail?: number | null;
   contExercices?: number | null;
@@ -41,15 +38,13 @@ type Resp = {
   contRythme?: number | null;
   contGlobal?: number | null;
 
-  // FORMATEUR (Likert 1..4)
   formMaitrise?: number | null;
   formCommunication?: number | null;
   formClarte?: number | null;
   formMethodo?: number | null;
   formGlobal?: number | null;
 
-  // Synthèse
-  reponduAttentes?: "OUI" | "PARTIELLEMENT" | "NON" | null;
+  reponduAttentes?: "OUI" | "PARTIELLEMENT" | "NON" | "YES" | "PARTLY" | "NO" | null;
   formationsComplementaires?: string | null;
   temoignage?: string | null;
   consentementTemoignage?: boolean | null;
@@ -64,10 +59,10 @@ type Props = {
     sessionDate: string | Date | null;
     location: string | null;
   };
-  responses: Resp[]; // liste brute sortie de Prisma
+  responses: Resp[];
 };
 
-const PALETTE = ["#2563eb", "#059669", "#f59e0b", "#ef4444", "#7c3aed"];
+const PALETTE = ["#2563eb", "#ef4444"];
 
 function mean(nums: Array<number | null | undefined>): number | null {
   const vals = nums.map((n) => (typeof n === "number" ? n : null)).filter((n): n is number => n !== null);
@@ -89,7 +84,7 @@ export default function ReportClient({ lang, form, responses }: Props) {
         },
         contentTitle: "CONTENT CHART",
         trainerTitle: "TRAINER CHART",
-        expectationsTitle: "EXPECTATIONS (YES / PARTLY / NO)",
+        expectationsTitle: "EXPECTATIONS (YES / NO)",
         desiredTrainings: "Desired complementary trainings",
         tableCol: { training: "Training idea" },
         xAxis: "Criteria",
@@ -111,7 +106,7 @@ export default function ReportClient({ lang, form, responses }: Props) {
           methodo: "Methodology mastery",
           global: "Overall (trainer)",
         },
-        expectations: { yes: "YES", partly: "PARTLY", no: "NO" },
+        expectations: { yes: "YES", no: "NO" },
       };
     }
     return {
@@ -124,7 +119,7 @@ export default function ReportClient({ lang, form, responses }: Props) {
       },
       contentTitle: "GRAPHIQUE CONTENU",
       trainerTitle: "GRAPHIQUE FORMATEUR",
-      expectationsTitle: "ATTENTES (OUI / PARTIELLEMENT / NON)",
+      expectationsTitle: "ATTENTES (OUI / NON)",
       desiredTrainings: "Formations complémentaires souhaitées",
       tableCol: { training: "Intitulé de formation" },
       xAxis: "Critères",
@@ -146,11 +141,11 @@ export default function ReportClient({ lang, form, responses }: Props) {
         methodo: "Maîtrise méthodologie",
         global: "Évaluation globale (formateur)",
       },
-      expectations: { yes: "OUI", partly: "PARTIELLEMENT", no: "NON" },
+      expectations: { yes: "OUI", no: "NON" },
     };
   }, [lang]);
 
-  // ---- Données pour CONTENU (moyennes)
+  // ---- Données pour CONTENU
   const contentData = useMemo(() => {
     return [
       { key: "contAttentes", label: L.content.attentes, avg: mean(responses.map((r) => r.contAttentes)) },
@@ -163,7 +158,7 @@ export default function ReportClient({ lang, form, responses }: Props) {
     ];
   }, [responses, L]);
 
-  // ---- Données pour FORMATEUR (moyennes)
+  // ---- Données pour FORMATEUR
   const trainerData = useMemo(() => {
     return [
       { key: "formMaitrise", label: L.trainerSec.maitrise, avg: mean(responses.map((r) => r.formMaitrise)) },
@@ -174,24 +169,23 @@ export default function ReportClient({ lang, form, responses }: Props) {
     ];
   }, [responses, L]);
 
-  // ---- Répartition OUI / PARTIELLEMENT / NON (camembert)
+  // ---- Pie chart OUI / NON uniquement
   const expectCounts = useMemo(() => {
     let yes = 0,
-      partly = 0,
       no = 0;
+
     responses.forEach((r) => {
-      if (r.reponduAttentes === "OUI") yes++;
-      else if (r.reponduAttentes === "PARTIELLEMENT") partly++;
-      else if (r.reponduAttentes === "NON") no++;
+      if (r.reponduAttentes === "OUI" || r.reponduAttentes === "YES") yes++;
+      else if (r.reponduAttentes === "NON" || r.reponduAttentes === "NO") no++;
     });
+
     return [
       { name: L.expectations.yes, value: yes },
-      { name: L.expectations.partly, value: partly },
       { name: L.expectations.no, value: no },
     ];
   }, [responses, L]);
 
-  // ---- Formations complémentaires (table)
+  // ---- Formations complémentaires
   const desiredTrainings = useMemo(() => {
     const rows =
       responses
@@ -200,13 +194,11 @@ export default function ReportClient({ lang, form, responses }: Props) {
     return rows;
   }, [responses]);
 
-  const dateStr = form.sessionDate
-    ? new Date(form.sessionDate).toLocaleDateString()
-    : "";
+  const dateStr = form.sessionDate ? new Date(form.sessionDate).toLocaleDateString() : "";
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-8">
-      {/* En-tête */}
+      {/* EN-TÊTE */}
       <header className="space-y-1">
         <h1 className="text-2xl font-bold">{L.title}</h1>
         <p className="text-sm text-neutral-600">
@@ -222,17 +214,14 @@ export default function ReportClient({ lang, form, responses }: Props) {
         <h2 className="text-lg font-semibold">{L.contentTitle}</h2>
         <div className="w-full h-80 bg-white rounded-2xl border">
           <ResponsiveContainer>
-            <BarChart
-              data={contentData}
-              margin={{ top: 16, right: 24, left: 8, bottom: 16 }}
-            >
+            <BarChart data={contentData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" tick={{ fontSize: 12 }} interval={0} />
-              <YAxis domain={[1, 4]} ticks={[1, 2, 3, 4]} label={{ value: L.yAxis, angle: -90, position: "insideLeft" }} />
+              <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={0} />
+              <YAxis domain={[1, 4]} ticks={[1, 2, 3, 4]} />
               <Tooltip />
               <Legend />
               <ReferenceLine y={3} stroke="#ef4444" strokeDasharray="5 5" label={L.threshold} />
-              <Bar dataKey="avg" name="Moyenne" fill={PALETTE[0]} maxBarSize={48} />
+              <Bar dataKey="avg" name="Moyenne" fill="#2563eb" maxBarSize={48} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -243,23 +232,20 @@ export default function ReportClient({ lang, form, responses }: Props) {
         <h2 className="text-lg font-semibold">{L.trainerTitle}</h2>
         <div className="w-full h-72 bg-white rounded-2xl border">
           <ResponsiveContainer>
-            <BarChart
-              data={trainerData}
-              margin={{ top: 16, right: 24, left: 8, bottom: 16 }}
-            >
+            <BarChart data={trainerData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" tick={{ fontSize: 12 }} interval={0} />
-              <YAxis domain={[1, 4]} ticks={[1, 2, 3, 4]} label={{ value: L.yAxis, angle: -90, position: "insideLeft" }} />
+              <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={0} />
+              <YAxis domain={[1, 4]} ticks={[1, 2, 3, 4]} />
               <Tooltip />
               <Legend />
               <ReferenceLine y={3} stroke="#ef4444" strokeDasharray="5 5" label={L.threshold} />
-              <Bar dataKey="avg" name="Moyenne" fill={PALETTE[1]} maxBarSize={48} />
+              <Bar dataKey="avg" name="Moyenne" fill="#059669" maxBarSize={48} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </section>
 
-      {/* ATTENTES (camembert) */}
+      {/* CAMEMBERT ATTENTES OUI / NON */}
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">{L.expectationsTitle}</h2>
         <div className="w-full h-64 bg-white rounded-2xl border">
@@ -277,7 +263,7 @@ export default function ReportClient({ lang, form, responses }: Props) {
                 label
               >
                 {expectCounts.map((_, i) => (
-                  <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
+                  <Cell key={i} fill={PALETTE[i]} />
                 ))}
               </Pie>
             </PieChart>
@@ -285,7 +271,7 @@ export default function ReportClient({ lang, form, responses }: Props) {
         </div>
       </section>
 
-      {/* Tableau des formations complémentaires souhaitées */}
+      {/* TABLEAU FORMATIONS COMPLÉMENTAIRES */}
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">{L.desiredTrainings}</h2>
         <div className="overflow-hidden rounded-2xl border bg-white">
