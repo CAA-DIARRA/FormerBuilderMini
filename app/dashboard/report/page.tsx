@@ -30,11 +30,12 @@ type RespRow = {
   formMethodo?: number | null;
   formGlobal?: number | null;
 
-  reponduAttentes?: "OUI" | "PARTIELLEMENT" | "NON" | null;
+  reponduAttentes?: "OUI" | "NON" | null; // 🧹 PARTIELLEMENT supprimé
   formationsComplementaires?: string | null;
   temoignage?: string | null;
 };
 
+// 🧹 PARTIELLEMENT retiré partout dans les labels
 const LABELS = {
   fr: {
     title: "Rapport d’évaluation",
@@ -58,7 +59,6 @@ const LABELS = {
     },
     expectQ: "Cette formation a-t-elle répondu à vos attentes ?",
     yes: "OUI",
-    partial: "PARTIELLEMENT",
     no: "NON",
     compTitle: "Formations complémentaires envisagées",
     none: "—",
@@ -85,7 +85,6 @@ const LABELS = {
     },
     expectQ: "Did this training meet your expectations?",
     yes: "YES",
-    partial: "PARTLY",
     no: "NO",
     compTitle: "Additional courses considered",
     none: "—",
@@ -117,13 +116,7 @@ function avg(nums: (number | null | undefined)[]) {
   return +(s / arr.length).toFixed(2);
 }
 
-export default async function ReportPage({
-  params,
-  searchParams,
-}: {
-  params: { formId: string };
-  searchParams?: { lang?: string };
-}) {
+export default async function ReportPage({ params, searchParams }: { params: { formId: string }; searchParams?: { lang?: string } }) {
   const lang: Lang = searchParams?.lang === "en" ? "en" : "fr";
   const L = LABELS[lang];
 
@@ -149,7 +142,6 @@ export default async function ReportPage({
     );
   }
 
-  // On lit toutes les réponses (les champs sont en colonnes dans le modèle Response)
   const raw = await prisma.response.findMany({
     where: { formId: form.id },
     orderBy: { id: "asc" },
@@ -176,32 +168,28 @@ export default async function ReportPage({
       formMethodo: true,
       formGlobal: true,
 
+      // 🧹 PARTIELLEMENT supprimé
       reponduAttentes: true,
       formationsComplementaires: true,
       temoignage: true,
     },
   });
+
   const participants = raw as RespRow[];
   const total = participants.length;
 
-  // Averages (Content & Trainer)
+  // Averages
   const contLabels = CONT_ROWS.map(r => (lang === "en" ? r.label_en : r.label_fr));
-  const contValues = CONT_ROWS.map(r =>
-    avg(participants.map(p => (p as any)[r.key] as number | null))
-  );
+  const contValues = CONT_ROWS.map(r => avg(participants.map(p => (p as any)[r.key])));
 
   const formLabels = FORM_ROWS.map(r => (lang === "en" ? r.label_en : r.label_fr));
-  const formValues = FORM_ROWS.map(r =>
-    avg(participants.map(p => (p as any)[r.key] as number | null))
-  );
+  const formValues = FORM_ROWS.map(r => avg(participants.map(p => (p as any)[r.key])));
 
-  // Expectations pie
+  // 🧹 PARTIELLEMENT retiré du graphique
   const countOui = participants.filter(p => p.reponduAttentes === "OUI").length;
-  const countPar = participants.filter(p => p.reponduAttentes === "PARTIELLEMENT").length;
   const countNon = participants.filter(p => p.reponduAttentes === "NON").length;
 
-  // QuickChart URLs (abscisse 1..5 comme demandé)
-  const cible = 3; // (référence visuelle), modifie si besoin
+  const cible = 3;
 
   const contCfg = {
     type: "bar",
@@ -218,6 +206,7 @@ export default async function ReportPage({
       plugins: { legend: { position: "bottom" }, title: { display: true, text: L.charts.cont } },
     },
   };
+
   const formCfg = {
     type: "bar",
     data: {
@@ -233,11 +222,12 @@ export default async function ReportPage({
       plugins: { legend: { position: "bottom" }, title: { display: true, text: L.charts.form } },
     },
   };
+
   const pieCfg = {
     type: "pie",
     data: {
-      labels: [L.yes, L.partial, L.no],
-      datasets: [{ data: [countOui, countPar, countNon] }],
+      labels: [L.yes, L.no],
+      datasets: [{ data: [countOui, countNon] }],
     },
     options: {
       plugins: { legend: { position: "bottom" }, title: { display: true, text: L.charts.pie } },
@@ -247,10 +237,7 @@ export default async function ReportPage({
   const qc = (cfg: any, w = 1200, h = 520) =>
     `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(cfg))}&format=png&backgroundColor=white&width=${w}&height=${h}`;
 
-  // Liste “formations complémentaires”
-  const compList = participants
-    .map(p => (p.formationsComplementaires || "").trim())
-    .filter(Boolean);
+  const compList = participants.map(p => (p.formationsComplementaires || "").trim()).filter(Boolean);
 
   const publicUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? ""}/f/${form.slug}`;
   const dStr = form.sessionDate ? new Date(form.sessionDate).toLocaleDateString() : "";
@@ -261,28 +248,23 @@ export default async function ReportPage({
         <h1 className="text-2xl font-bold">{L.title}</h1>
         <div className="flex gap-3">
           <Link href="/dashboard" className="px-3 py-1 rounded border hover:bg-neutral-50">{L.back}</Link>
-          {/* Lien direct vers l'export XLSX (lang synchronisée) */}
-          <Link
-            href={`/api/forms/${form.id}/export?lang=${lang}`}
-            className="px-3 py-1 rounded border hover:bg-neutral-50"
-          >
+          <Link href={`/api/forms/${form.id}/export?lang=${lang}`} className="px-3 py-1 rounded border hover:bg-neutral-50">
             Export XLSX
           </Link>
         </div>
       </div>
 
-      {/* META */}
       <section className="grid gap-2 text-sm">
         <div><span className="font-medium">{L.meta.trainer} :</span> {form.trainerName ?? ""}</div>
         <div><span className="font-medium">{L.meta.date} :</span> {dStr}</div>
         <div><span className="font-medium">{L.meta.location} :</span> {form.location ?? ""}</div>
-        <div><span className="font-medium">{L.meta.publicUrl} :</span>{" "}
+        <div>
+          <span className="font-medium">{L.meta.publicUrl} :</span>{" "}
           <Link className="underline" href={publicUrl} target="_blank">{publicUrl}</Link>
         </div>
         <div><span className="font-medium">{L.meta.responses} :</span> {total}</div>
       </section>
 
-      {/* TABLEAU DES MOYENNES */}
       <section className="grid md:grid-cols-2 gap-6">
         <div className="border rounded-2xl p-4 bg-white">
           <h2 className="font-semibold mb-3">{L.contTitle}</h2>
@@ -329,42 +311,19 @@ export default async function ReportPage({
         </div>
       </section>
 
-      {/* GRAPHIQUES */}
       <section className="grid md:grid-cols-2 gap-6">
         <div className="border rounded-2xl p-4 bg-white">
-          <Image
-            src={qc(contCfg)}
-            alt={L.charts.cont}
-            width={1200}
-            height={520}
-            className="w-full h-auto rounded-lg"
-            unoptimized
-          />
+          <Image src={qc(contCfg)} alt={L.charts.cont} width={1200} height={520} className="w-full h-auto rounded-lg" unoptimized />
         </div>
         <div className="border rounded-2xl p-4 bg-white">
-          <Image
-            src={qc(formCfg)}
-            alt={L.charts.form}
-            width={1200}
-            height={520}
-            className="w-full h-auto rounded-lg"
-            unoptimized
-          />
+          <Image src={qc(formCfg)} alt={L.charts.form} width={1200} height={520} className="w-full h-auto rounded-lg" unoptimized />
         </div>
       </section>
 
       <section className="border rounded-2xl p-4 bg-white">
-        <Image
-          src={qc(pieCfg, 800, 480)}
-          alt="Pie"
-          width={800}
-          height={480}
-          className="w-full h-auto rounded-lg"
-          unoptimized
-        />
+        <Image src={qc(pieCfg, 800, 480)} alt="Pie" width={800} height={480} className="w-full h-auto rounded-lg" unoptimized />
       </section>
 
-      {/* FORMATIONS COMPLÉMENTAIRES */}
       <section className="border rounded-2xl p-4 bg-white">
         <h2 className="font-semibold mb-3">{L.compTitle}</h2>
         {compList.length === 0 ? (
