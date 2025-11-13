@@ -15,7 +15,6 @@ type FormDto = {
   location?: string | null;
   isOpen: boolean;
 
-  // 🆕 Durée
   durationStart?: string | null;
   durationEnd?: string | null;
 };
@@ -26,7 +25,11 @@ type Props = {
 };
 
 export default function FormClient({ form, lang = "fr" }: Props) {
-  // ====== Traductions ======
+
+  /** 🔥 Très important :
+   * Le texte T NE DÉPEND QUE DE "lang"
+   * Plus aucun re-render parasite pendant la saisie.
+   */
   const T = useMemo(() => {
     if (lang === "en") {
       return {
@@ -115,7 +118,7 @@ export default function FormClient({ form, lang = "fr" }: Props) {
         methodo: "4. Comment avez-vous trouvé la méthodologie utilisée pour la formation ?",
         supports: "5. Comment avez-vous trouvé les supports de la formation ?",
         rythme: "6. Comment avez-vous trouvé le rythme de la formation ?",
-        global: "7 .Évaluation globale de la formation",
+        global: "7. Évaluation globale de la formation",
       },
       formTitle: "III. Le(s) Formateur(s)",
       formSec: {
@@ -137,9 +140,9 @@ export default function FormClient({ form, lang = "fr" }: Props) {
       ok: "Merci pour votre retour !",
       ko: "Une erreur est survenue lors de l’envoi.",
     };
-  }, [lang, form?.title, form?.trainerName, form?.location, form?.durationStart, form?.durationEnd]);
+  }, [lang]);   // <🔥🔥 IMPORTANT : que "lang". RIEN D'AUTRE.
 
-  // ====== États indépendants ======
+  // ====== États ======
   const [participantNom, setParticipantNom] = useState("");
   const [participantPrenoms, setParticipantPrenoms] = useState("");
   const [participantFonction, setParticipantFonction] = useState("");
@@ -167,9 +170,8 @@ export default function FormClient({ form, lang = "fr" }: Props) {
     formGlobal: 4,
   });
 
-  const updateNote = (key: keyof typeof notes, value: number) => {
-    setNotes((prev) => (prev[key] === value ? prev : { ...prev, [key]: value }));
-  };
+  const updateNote = (key: keyof typeof notes, value: number) =>
+    setNotes((prev) => ({ ...prev, [key]: value }));
 
   const [reponduAttentes, setReponduAttentes] = useState(lang === "en" ? "YES" : "OUI");
   const [loading, setLoading] = useState(false);
@@ -205,94 +207,41 @@ export default function FormClient({ form, lang = "fr" }: Props) {
     }
   };
 
-  // ====== Composants ======
-  const Section = ({ title, children }: React.PropsWithChildren<{ title: string }>) => (
-    <section className="border rounded-2xl p-4 space-y-4 bg-white">
-      <h2 className="text-lg font-semibold">{title}</h2>
-      {children}
-    </section>
-  );
-
-  const ScaleHeader = () => (
-    <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs text-neutral-600">
-      <div className="col-span-2" />
-      {T.scaleH.map((h) => (
-        <div key={h} className="text-center">
-          {h}
-        </div>
-      ))}
-    </div>
-  );
-
-  const RadioRow = ({ label, name }: { label: string; name: keyof typeof notes }) => (
-    <div className="grid grid-cols-2 md:grid-cols-6 items-center gap-2">
-      <div className="col-span-2">{label}</div>
-      {scale.map((v) => (
-        <label key={`${name}-${v}`} className="flex items-center justify-center gap-1">
-          <input
-            type="radio"
-            name={name}
-            checked={notes[name] === v}
-            onChange={() => updateNote(name, v)}
-          />
-        </label>
-      ))}
-    </div>
-  );
-
   // ====== Rendu ======
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-6">
+
+      {/* HEADER */}
       <header className="space-y-1">
         <h1 className="text-2xl font-bold">{T.pageTitle}</h1>
         <p className="text-sm">{T.headerLine(safeDate)}</p>
       </header>
 
-      {/* PARTICIPANT */}
+      {/* SECTION PARTICIPANT */}
       <Section title={T.participant}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <input
-            className="border rounded-xl p-2"
-            placeholder={T.fields.lastName}
-            value={participantNom}
-            onChange={(e) => setParticipantNom(e.target.value)}
-          />
-          <input
-            className="border rounded-xl p-2"
-            placeholder={T.fields.firstNames}
-            value={participantPrenoms}
-            onChange={(e) => setParticipantPrenoms(e.target.value)}
-          />
-          <input
-            className="border rounded-xl p-2"
-            placeholder={T.fields.role}
-            value={participantFonction}
-            onChange={(e) => setParticipantFonction(e.target.value)}
-          />
-          <input
-            className="border rounded-xl p-2"
-            placeholder={T.fields.company}
-            value={participantEntreprise}
-            onChange={(e) => setParticipantEntreprise(e.target.value)}
-          />
+          <input className="border rounded-xl p-2" placeholder={T.fields.lastName}
+            value={participantNom} onChange={(e) => setParticipantNom(e.target.value)} />
+          <input className="border rounded-xl p-2" placeholder={T.fields.firstNames}
+            value={participantPrenoms} onChange={(e) => setParticipantPrenoms(e.target.value)} />
+          <input className="border rounded-xl p-2" placeholder={T.fields.role}
+            value={participantFonction} onChange={(e) => setParticipantFonction(e.target.value)} />
+          <input className="border rounded-xl p-2" placeholder={T.fields.company}
+            value={participantEntreprise} onChange={(e) => setParticipantEntreprise(e.target.value)} />
         </div>
       </Section>
 
-      {/* ENVIRONNEMENT */}
+      {/* SECTION ENVIRONNEMENT */}
       <Section title={T.envTitle}>
         <ScaleHeader />
         <RadioRow label={T.env.accueil} name="envAccueil" />
         <RadioRow label={T.env.lieux} name="envLieu" />
         <RadioRow label={T.env.materiel} name="envMateriel" />
-        <textarea
-          className="w-full border rounded-xl p-2"
-          placeholder={T.env.ameliors}
-          value={envAmeliorations}
-          onChange={(e) => setEnvAmeliorations(e.target.value)}
-        />
+        <textarea className="w-full border rounded-xl p-2" placeholder={T.env.ameliors}
+          value={envAmeliorations} onChange={(e) => setEnvAmeliorations(e.target.value)} />
       </Section>
 
-      {/* CONTENU */}
+      {/* SECTION CONTENU */}
       <Section title={T.contTitle}>
         <ScaleHeader />
         <RadioRow label={T.cont.attentes} name="contAttentes" />
@@ -304,7 +253,7 @@ export default function FormClient({ form, lang = "fr" }: Props) {
         <RadioRow label={T.cont.global} name="contGlobal" />
       </Section>
 
-      {/* FORMATEUR(S) */}
+      {/* SECTION FORMATEUR */}
       <Section title={T.formTitle}>
         <ScaleHeader />
         <RadioRow label={T.formSec.maitrise} name="formMaitrise" />
@@ -314,19 +263,16 @@ export default function FormClient({ form, lang = "fr" }: Props) {
         <RadioRow label={T.formSec.global} name="formGlobal" />
       </Section>
 
-      {/* SYNTHÈSE */}
+      {/* SECTION SYNTHÈSE */}
       <Section title={T.synthTitle}>
         <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
           <span>{T.synthQ}</span>
           <div className="flex gap-4">
             {T.opts.map((opt) => (
               <label key={opt} className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="reponduAttentes"
+                <input type="radio" name="reponduAttentes"
                   checked={reponduAttentes === opt}
-                  onChange={() => setReponduAttentes(opt)}
-                />
+                  onChange={() => setReponduAttentes(opt)} />
                 <span className="text-sm">{opt}</span>
               </label>
             ))}
@@ -334,30 +280,22 @@ export default function FormClient({ form, lang = "fr" }: Props) {
         </div>
       </Section>
 
-      {/* COMPLÉMENTS / TÉMOIGNAGE */}
+      {/* SECTION TÉMOIGNAGES */}
       <Section title={T.extraTitle}>
-        <textarea
-          className="w-full border rounded-xl p-2"
-          placeholder={T.extraQ1}
+        <textarea className="w-full border rounded-xl p-2" placeholder={T.extraQ1}
           value={formationsComplementaires}
-          onChange={(e) => setFormationsComplementaires(e.target.value)}
-        />
-        <textarea
-          className="w-full border rounded-xl p-2"
-          placeholder={T.extraQ2}
+          onChange={(e) => setFormationsComplementaires(e.target.value)} />
+        <textarea className="w-full border rounded-xl p-2" placeholder={T.extraQ2}
           value={temoignage}
-          onChange={(e) => setTemoignage(e.target.value)}
-        />
+          onChange={(e) => setTemoignage(e.target.value)} />
         <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={consentementTemoignage}
-            onChange={(e) => setConsentementTemoignage(e.target.checked)}
-          />
+          <input type="checkbox" checked={consentementTemoignage}
+            onChange={(e) => setConsentementTemoignage(e.target.checked)} />
           <span>{T.consent}</span>
         </label>
       </Section>
 
+      {/* SUBMIT */}
       <button
         className="px-4 py-2 rounded-2xl border shadow bg-black text-white disabled:opacity-50"
         disabled={loading}
@@ -367,4 +305,62 @@ export default function FormClient({ form, lang = "fr" }: Props) {
       </button>
     </div>
   );
+}
+
+/* ====== Sous-composants ====== */
+
+function Section({ title, children }: React.PropsWithChildren<{ title: string }>) {
+  return (
+    <section className="border rounded-2xl p-4 space-y-4 bg-white">
+      <h2 className="text-lg font-semibold">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+function ScaleHeader() {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs text-neutral-600">
+      <div className="col-span-2" />
+      <div className="text-center">4</div>
+      <div className="text-center">3</div>
+      <div className="text-center">2</div>
+      <div className="text-center">1</div>
+    </div>
+  );
+}
+
+function RadioRow({ label, name }: { label: string; name: keyof ReturnType<typeof useNotes>["notes"] }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-6 items-center gap-2">
+      <div className="col-span-2">{label}</div>
+      {scale.map((v) => (
+        <label key={`${name}-${v}`} className="flex items-center justify-center gap-1">
+          <input type="radio" name={name} value={v} />
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function useNotes() {
+  const [notes, setNotes] = useState({
+    envAccueil: 4,
+    envLieu: 4,
+    envMateriel: 4,
+    contAttentes: 4,
+    contUtiliteTravail: 4,
+    contExercices: 4,
+    contMethodologie: 4,
+    contSupports: 4,
+    contRythme: 4,
+    contGlobal: 4,
+    formMaitrise: 4,
+    formCommunication: 4,
+    formClarte: 4,
+    formMethodo: 4,
+    formGlobal: 4,
+  });
+
+  return { notes, setNotes };
 }
