@@ -197,7 +197,7 @@ export default async function ReportPage({
 
   // Expectations pie
   const countOui = participants.filter(p => p.reponduAttentes === "OUI").length;
-  //const countPar = participants.filter(p => p.reponduAttentes === "PARTIELLEMENT").length;
+  const countPar = participants.filter(p => p.reponduAttentes === "PARTIELLEMENT").length;
   const countNon = participants.filter(p => p.reponduAttentes === "NON").length;
 
   // QuickChart URLs (abscisse 1..5 comme demandé)
