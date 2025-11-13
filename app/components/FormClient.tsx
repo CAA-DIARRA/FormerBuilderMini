@@ -60,7 +60,7 @@ export default function FormClient({ form, lang = "fr" }: Props) {
           methodo: "4. How did you find the methodology used?",
           supports: "5. How did you find the training materials?",
           rythme: "6. How did you find the training pace?",
-          global: "Overall evaluation of the training",
+          global: "7. Overall evaluation of the training",
         },
         formTitle: "III. Trainer(s)",
         formSec: {
@@ -115,7 +115,7 @@ export default function FormClient({ form, lang = "fr" }: Props) {
         methodo: "4. Comment avez-vous trouvé la méthodologie utilisée pour la formation ?",
         supports: "5. Comment avez-vous trouvé les supports de la formation ?",
         rythme: "6. Comment avez-vous trouvé le rythme de la formation ?",
-        global: "Évaluation globale de la formation",
+        global: "7 .Évaluation globale de la formation",
       },
       formTitle: "III. Le(s) Formateur(s)",
       formSec: {
