@@ -30,12 +30,11 @@ type RespRow = {
   formMethodo?: number | null;
   formGlobal?: number | null;
 
-  reponduAttentes?: "OUI" | "NON" | null; // 🧹 PARTIELLEMENT supprimé
+  reponduAttentes?: "OUI" | "PARTIELLEMENT" | "NON" | null;
   formationsComplementaires?: string | null;
   temoignage?: string | null;
 };
 
-// 🧹 PARTIELLEMENT retiré partout dans les labels
 const LABELS = {
   fr: {
     title: "Rapport d’évaluation",
@@ -59,6 +58,7 @@ const LABELS = {
     },
     expectQ: "Cette formation a-t-elle répondu à vos attentes ?",
     yes: "OUI",
+    partial: "PARTIELLEMENT",
     no: "NON",
     compTitle: "Formations complémentaires envisagées",
     none: "—",
@@ -85,6 +85,7 @@ const LABELS = {
     },
     expectQ: "Did this training meet your expectations?",
     yes: "YES",
+    partial: "PARTLY",
     no: "NO",
     compTitle: "Additional courses considered",
     none: "—",
@@ -92,21 +93,21 @@ const LABELS = {
 } as const;
 
 const CONT_ROWS = [
-  { key: "contAttentes", label_fr: "Le contenu couvre-t-il vos attentes ?", label_en: "Does the content meet your expectations?" },
-  { key: "contUtiliteTravail", label_fr: "Contenu utile pour le travail ?", label_en: "Is content useful for your work?" },
+  { key: "contAttentes", label_fr: "Le contenu répondait-il à vos attentes ?", label_en: "Does the content meet your expectations?" },
+  { key: "contUtiliteTravail", label_fr: "Contenu utile pour votre travail ?", label_en: "Is content useful for your work?" },
   { key: "contExercices", label_fr: "Exercices / exemples / vidéos", label_en: "Exercises / examples / videos" },
-  { key: "contMethodologie", label_fr: "Méthodologie utilisée", label_en: "Methodology used" },
+  { key: "contMethodologie", label_fr: "Méthodologie employée", label_en: "Methodology used" },
   { key: "contSupports", label_fr: "Supports de formation", label_en: "Training materials" },
   { key: "contRythme", label_fr: "Rythme de la formation", label_en: "Training pace" },
-  { key: "contGlobal", label_fr: "Évaluation globale de la formation", label_en: "Overall evaluation of the training" },
+  { key: "contGlobal", label_fr: "Évaluation globale du contenu", label_en: "Overall training evaluation" },
 ] as const;
 
 const FORM_ROWS = [
   { key: "formMaitrise", label_fr: "Maîtrise du sujet", label_en: "Mastery of the subject" },
-  { key: "formCommunication", label_fr: "Qualité de communication", label_en: "Quality of communication" },
+  { key: "formCommunication", label_fr: "Communication", label_en: "Communication quality" },
   { key: "formClarte", label_fr: "Clarté des réponses", label_en: "Clarity of answers" },
   { key: "formMethodo", label_fr: "Maîtrise de la méthodologie", label_en: "Mastery of methodology" },
-  { key: "formGlobal", label_fr: "Évaluation globale du formateur", label_en: "Overall evaluation of the trainer" },
+  { key: "formGlobal", label_fr: "Évaluation globale du formateur", label_en: "Overall trainer evaluation" },
 ] as const;
 
 function avg(nums: (number | null | undefined)[]) {
@@ -116,7 +117,13 @@ function avg(nums: (number | null | undefined)[]) {
   return +(s / arr.length).toFixed(2);
 }
 
-export default async function ReportPage({ params, searchParams }: { params: { formId: string }; searchParams?: { lang?: string } }) {
+export default async function ReportPage({
+  params,
+  searchParams,
+}: {
+  params: { formId: string };
+  searchParams?: { lang?: string };
+}) {
   const lang: Lang = searchParams?.lang === "en" ? "en" : "fr";
   const L = LABELS[lang];
 
@@ -168,7 +175,6 @@ export default async function ReportPage({ params, searchParams }: { params: { f
       formMethodo: true,
       formGlobal: true,
 
-      // 🧹 PARTIELLEMENT supprimé
       reponduAttentes: true,
       formationsComplementaires: true,
       temoignage: true,
@@ -178,18 +184,33 @@ export default async function ReportPage({ params, searchParams }: { params: { f
   const participants = raw as RespRow[];
   const total = participants.length;
 
-  // Averages
+  // MOYENNES
   const contLabels = CONT_ROWS.map(r => (lang === "en" ? r.label_en : r.label_fr));
   const contValues = CONT_ROWS.map(r => avg(participants.map(p => (p as any)[r.key])));
 
   const formLabels = FORM_ROWS.map(r => (lang === "en" ? r.label_en : r.label_fr));
   const formValues = FORM_ROWS.map(r => avg(participants.map(p => (p as any)[r.key])));
 
-  // 🧹 PARTIELLEMENT retiré du graphique
+  // PIE
   const countOui = participants.filter(p => p.reponduAttentes === "OUI").length;
+  const countPar = participants.filter(p => p.reponduAttentes === "PARTIELLEMENT").length;
   const countNon = participants.filter(p => p.reponduAttentes === "NON").length;
 
   const cible = 3;
+
+  // =======================
+  // CHART CONFIG FIXÉE
+  // Enlève "_invisible_bounds_" de la légende
+  // =======================
+
+  const legendFix = {
+    legend: {
+      position: "bottom",
+      labels: {
+        filter: (item: any) => !item.text?.includes("_invisible_bounds_"),
+      },
+    },
+  };
 
   const contCfg = {
     type: "bar",
@@ -203,7 +224,10 @@ export default async function ReportPage({ params, searchParams }: { params: { f
     options: {
       indexAxis: "y",
       scales: { x: { min: 1, max: 5, ticks: { stepSize: 1 } } },
-      plugins: { legend: { position: "bottom" }, title: { display: true, text: L.charts.cont } },
+      plugins: {
+        ...legendFix,
+        title: { display: true, text: L.charts.cont },
+      },
     },
   };
 
@@ -219,52 +243,65 @@ export default async function ReportPage({ params, searchParams }: { params: { f
     options: {
       indexAxis: "y",
       scales: { x: { min: 1, max: 5, ticks: { stepSize: 1 } } },
-      plugins: { legend: { position: "bottom" }, title: { display: true, text: L.charts.form } },
+      plugins: {
+        ...legendFix,
+        title: { display: true, text: L.charts.form },
+      },
     },
   };
 
   const pieCfg = {
     type: "pie",
     data: {
-      labels: [L.yes, L.no],
-      datasets: [{ data: [countOui, countNon] }],
+      labels: [L.yes, L.partial, L.no],
+      datasets: [{ data: [countOui, countPar, countNon] }],
     },
     options: {
-      plugins: { legend: { position: "bottom" }, title: { display: true, text: L.charts.pie } },
+      plugins: {
+        ...legendFix,
+        title: { display: true, text: L.charts.pie },
+      },
     },
   };
 
   const qc = (cfg: any, w = 1200, h = 520) =>
     `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(cfg))}&format=png&backgroundColor=white&width=${w}&height=${h}`;
 
-  const compList = participants.map(p => (p.formationsComplementaires || "").trim()).filter(Boolean);
+  const compList = participants
+    .map(p => (p.formationsComplementaires || "").trim())
+    .filter(Boolean);
 
   const publicUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? ""}/f/${form.slug}`;
   const dStr = form.sessionDate ? new Date(form.sessionDate).toLocaleDateString() : "";
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-8">
+
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{L.title}</h1>
         <div className="flex gap-3">
           <Link href="/dashboard" className="px-3 py-1 rounded border hover:bg-neutral-50">{L.back}</Link>
-          <Link href={`/api/forms/${form.id}/export?lang=${lang}`} className="px-3 py-1 rounded border hover:bg-neutral-50">
+          <Link
+            href={`/api/forms/${form.id}/export?lang=${lang}`}
+            className="px-3 py-1 rounded border hover:bg-neutral-50"
+          >
             Export XLSX
           </Link>
         </div>
       </div>
 
+      {/* META */}
       <section className="grid gap-2 text-sm">
         <div><span className="font-medium">{L.meta.trainer} :</span> {form.trainerName ?? ""}</div>
         <div><span className="font-medium">{L.meta.date} :</span> {dStr}</div>
         <div><span className="font-medium">{L.meta.location} :</span> {form.location ?? ""}</div>
-        <div>
-          <span className="font-medium">{L.meta.publicUrl} :</span>{" "}
+        <div><span className="font-medium">{L.meta.publicUrl} :</span>{" "}
           <Link className="underline" href={publicUrl} target="_blank">{publicUrl}</Link>
         </div>
         <div><span className="font-medium">{L.meta.responses} :</span> {total}</div>
       </section>
 
+      {/* TABLEAUX */}
       <section className="grid md:grid-cols-2 gap-6">
         <div className="border rounded-2xl p-4 bg-white">
           <h2 className="font-semibold mb-3">{L.contTitle}</h2>
@@ -311,19 +348,43 @@ export default async function ReportPage({ params, searchParams }: { params: { f
         </div>
       </section>
 
+      {/* GRAPHIQUES */}
       <section className="grid md:grid-cols-2 gap-6">
         <div className="border rounded-2xl p-4 bg-white">
-          <Image src={qc(contCfg)} alt={L.charts.cont} width={1200} height={520} className="w-full h-auto rounded-lg" unoptimized />
+          <Image
+            src={qc(contCfg)}
+            alt="Content Chart"
+            width={1200}
+            height={520}
+            className="w-full h-auto rounded-lg"
+            unoptimized
+          />
         </div>
+
         <div className="border rounded-2xl p-4 bg-white">
-          <Image src={qc(formCfg)} alt={L.charts.form} width={1200} height={520} className="w-full h-auto rounded-lg" unoptimized />
+          <Image
+            src={qc(formCfg)}
+            alt="Trainer Chart"
+            width={1200}
+            height={520}
+            className="w-full h-auto rounded-lg"
+            unoptimized
+          />
         </div>
       </section>
 
       <section className="border rounded-2xl p-4 bg-white">
-        <Image src={qc(pieCfg, 800, 480)} alt="Pie" width={800} height={480} className="w-full h-auto rounded-lg" unoptimized />
+        <Image
+          src={qc(pieCfg, 800, 480)}
+          alt="Pie Chart"
+          width={800}
+          height={480}
+          className="w-full h-auto rounded-lg"
+          unoptimized
+        />
       </section>
 
+      {/* FORMATIONS COMPLÉMENTAIRES */}
       <section className="border rounded-2xl p-4 bg-white">
         <h2 className="font-semibold mb-3">{L.compTitle}</h2>
         {compList.length === 0 ? (
