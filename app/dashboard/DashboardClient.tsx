@@ -7,7 +7,7 @@ export type FormRow = {
   id: string;
   title: string;
   slug: string;
-  createdAt: string | null; // Sérialisation Next des Date
+  createdAt: string | null;
   isOpen: boolean;
 };
 
@@ -29,7 +29,6 @@ export default function DashboardClient({
   const [showLink, setShowLink] = useState<string | null>(null);
   const [showExport, setShowExport] = useState<string | null>(null);
 
-  // ✅ Détection correcte du domaine (évite les URLs doublées)
   const base =
     typeof window !== "undefined"
       ? window.location.origin
@@ -53,6 +52,7 @@ export default function DashboardClient({
           >
             {lang === "fr" ? "🇬🇧 English" : "🇫🇷 Français"}
           </button>
+
           <Link
             href={`/forms/new?lang=${lang}`}
             className="px-4 py-2 rounded-xl bg-black text-white hover:bg-neutral-800 transition"
@@ -64,27 +64,12 @@ export default function DashboardClient({
 
       {/* STATS */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="p-4 border rounded-2xl bg-white shadow">
-          <h2 className="text-sm text-neutral-500">
-            {lang === "fr" ? "Formulaires" : "Forms"}
-          </h2>
-          <p className="text-2xl font-bold">{stats.totalForms}</p>
-        </div>
-        <div className="p-4 border rounded-2xl bg-white shadow">
-          <h2 className="text-sm text-neutral-500">
-            {lang === "fr" ? "Réponses" : "Responses"}
-          </h2>
-          <p className="text-2xl font-bold">{stats.totalResponses}</p>
-        </div>
-        <div className="p-4 border rounded-2xl bg-white shadow">
-          <h2 className="text-sm text-neutral-500">
-            {lang === "fr" ? "Actifs" : "Active"}
-          </h2>
-          <p className="text-2xl font-bold">{stats.activeForms}</p>
-        </div>
+        <Card label={lang === "fr" ? "Formulaires" : "Forms"} value={stats.totalForms} />
+        <Card label={lang === "fr" ? "Réponses" : "Responses"} value={stats.totalResponses} />
+        <Card label={lang === "fr" ? "Actifs" : "Active"} value={stats.activeForms} />
       </section>
 
-      {/* LISTE DES FORMULAIRES */}
+      {/* LISTE */}
       <section className="space-y-3">
         {forms.length === 0 && (
           <p className="opacity-70 text-sm">
@@ -92,107 +77,174 @@ export default function DashboardClient({
           </p>
         )}
 
-        {forms.map((f) => (
-          <div
-            key={f.id}
-            className="p-4 border rounded-2xl bg-white flex flex-col md:flex-row md:items-center justify-between gap-3 shadow"
-          >
-            <div>
-              <h3 className="font-semibold">{f.title}</h3>
-              <p className="text-xs text-neutral-500">Slug: {f.slug}</p>
-              <p className="text-xs text-neutral-500">
-                {lang === "fr" ? "Créé le" : "Created"}{" "}
-                {f.createdAt ? new Date(f.createdAt).toLocaleDateString() : "—"}
-              </p>
-            </div>
+        {forms.map((f) => {
+          const disabled = !f.isOpen;
 
-            {/* Actions */}
-            <div className="flex flex-wrap gap-2">
-              {/* 🧭 Ouvrir le formulaire */}
-              <Link
-                href={`/f/${f.slug}?lang=${lang}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3 py-1.5 border rounded-xl text-sm hover:bg-neutral-100"
-              >
-                🚀 {lang === "fr" ? "Ouvrir" : "Open"}
-              </Link>
+          return (
+            <div
+              key={f.id}
+              className="p-4 border rounded-2xl bg-white flex flex-col md:flex-row md:items-center justify-between gap-3 shadow"
+            >
+              <div>
+                <h3 className="font-semibold">
+                  {f.title}{" "}
+                  {!f.isOpen && (
+                    <span className="ml-2 px-2 py-0.5 text-xs bg-red-100 text-red-600 rounded-xl">
+                      Inactif
+                    </span>
+                  )}
+                </h3>
+                <p className="text-xs text-neutral-500">Slug: {f.slug}</p>
+                <p className="text-xs text-neutral-500">
+                  {lang === "fr" ? "Créé le" : "Created"}{" "}
+                  {f.createdAt ? new Date(f.createdAt).toLocaleDateString() : "—"}
+                </p>
+              </div>
 
-              {/* 📊 Rapport */}
-              <Link
-                href={`/dashboard/forms/${f.id}/report?lang=${lang}`}
-                className="px-3 py-1.5 border rounded-xl text-sm hover:bg-neutral-100"
-              >
-                📊 {lang === "fr" ? "Rapport" : "Report"}
-              </Link>
+              {/* ACTIONS */}
+              <div className="flex flex-wrap gap-2">
 
-              {/* 📱 QR */}
-              <button
-                onClick={() => setShowQR(f.id)}
-                className="px-3 py-1.5 border rounded-xl text-sm hover:bg-neutral-100"
-              >
-                📱 QR
-              </button>
+                {/* 🚀 Ouvrir */}
+                <button
+                  disabled={disabled}
+                  onClick={() => {
+                    if (!disabled) window.open(`/f/${f.slug}?lang=${lang}`, "_blank");
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-sm border ${
+                    disabled
+                      ? "opacity-40 cursor-not-allowed"
+                      : "hover:bg-neutral-100"
+                  }`}
+                >
+                  🚀 {lang === "fr" ? "Ouvrir" : "Open"}
+                </button>
 
-              {/* 🔗 Liens */}
-              <button
-                onClick={() => setShowLink(f.id)}
-                className="px-3 py-1.5 border rounded-xl text-sm hover:bg-neutral-100"
-              >
-                🔗 {lang === "fr" ? "Lien" : "Link"}
-              </button>
+                {/* 📊 Rapport */}
+                <Link
+                  href={`/dashboard/forms/${f.id}/report?lang=${lang}`}
+                  className="px-3 py-1.5 border rounded-xl text-sm hover:bg-neutral-100"
+                >
+                  📊 {lang === "fr" ? "Rapport" : "Report"}
+                </Link>
 
-              {/* 📤 Export */}
-              <button
-                onClick={() => setShowExport(f.id)}
-                className="px-3 py-1.5 border rounded-xl text-sm hover:bg-neutral-100"
-              >
-                📤 {lang === "fr" ? "Exporter" : "Export"}
-              </button>
+                {/* QR */}
+                <button
+                  disabled={disabled}
+                  onClick={() => !disabled && setShowQR(f.id)}
+                  className={`px-3 py-1.5 border rounded-xl text-sm ${
+                    disabled
+                      ? "opacity-40 cursor-not-allowed"
+                      : "hover:bg-neutral-100"
+                  }`}
+                >
+                  📱 QR
+                </button>
 
-              {/* 🗑 Supprimer */}
-              <button
-                onClick={async () => {
-                  if (
-                    confirm(
-                      lang === "fr"
-                        ? "Supprimer définitivement ce formulaire ?"
-                        : "Delete this form permanently?"
-                    )
-                  ) {
-                    await fetch(`/api/forms/${f.id}`, { method: "DELETE" });
+                {/* Lien */}
+                <button
+                  disabled={disabled}
+                  onClick={() => !disabled && setShowLink(f.id)}
+                  className={`px-3 py-1.5 border rounded-xl text-sm ${
+                    disabled
+                      ? "opacity-40 cursor-not-allowed"
+                      : "hover:bg-neutral-100"
+                  }`}
+                >
+                  🔗 {lang === "fr" ? "Lien" : "Link"}
+                </button>
+
+                {/* Export */}
+                <button
+                  disabled={disabled}
+                  onClick={() => !disabled && setShowExport(f.id)}
+                  className={`px-3 py-1.5 border rounded-xl text-sm ${
+                    disabled
+                      ? "opacity-40 cursor-not-allowed"
+                      : "hover:bg-neutral-100"
+                  }`}
+                >
+                  📤 {lang === "fr" ? "Exporter" : "Export"}
+                </button>
+
+                {/* 🟢 / 🔴 Activer / Désactiver */}
+                <button
+                  onClick={async () => {
+                    await fetch(`/api/forms/${f.id}`, {
+                      method: "PATCH",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({ isOpen: !f.isOpen }),
+                    });
+
                     location.reload();
-                  }
-                }}
-                className="px-3 py-1.5 border border-red-500 text-red-500 rounded-xl text-sm hover:bg-red-50"
-              >
-                🗑 {lang === "fr" ? "Supprimer" : "Delete"}
-              </button>
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-sm border ${
+                    f.isOpen
+                      ? "border-red-500 text-red-500 hover:bg-red-50"
+                      : "border-green-600 text-green-600 hover:bg-green-50"
+                  }`}
+                >
+                  {f.isOpen
+                    ? lang === "fr"
+                      ? "Désactiver"
+                      : "Disable"
+                    : lang === "fr"
+                    ? "Activer"
+                    : "Enable"}
+                </button>
+
+                {/* 🗑 SUPPRIMER */}
+                <button
+                  onClick={async () => {
+                    if (
+                      confirm(
+                        lang === "fr"
+                          ? "Supprimer définitivement ce formulaire ?"
+                          : "Delete this form?"
+                      )
+                    ) {
+                      await fetch(`/api/forms/${f.id}`, { method: "DELETE" });
+                      location.reload();
+                    }
+                  }}
+                  className="px-3 py-1.5 border border-red-500 text-red-500 rounded-xl text-sm hover:bg-red-50"
+                >
+                  🗑 {lang === "fr" ? "Supprimer" : "Delete"}
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </section>
 
-      {/* Modale QR */}
+      {/* Modales */}
       {showQR && (
         <Modal title="QR Codes" onClose={() => setShowQR(null)}>
           <ModalQR base={base} forms={forms} id={showQR} />
         </Modal>
       )}
 
-      {/* Modale Lien */}
       {showLink && (
         <Modal title="Liens du formulaire" onClose={() => setShowLink(null)}>
           <ModalLinks base={base} forms={forms} id={showLink} />
         </Modal>
       )}
 
-      {/* Modale Export */}
       {showExport && (
         <Modal title="Exporter en Excel" onClose={() => setShowExport(null)}>
           <ModalExport id={showExport} />
         </Modal>
       )}
+    </div>
+  );
+}
+
+/* ---- petits composants ----- */
+
+function Card({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="p-4 border rounded-2xl bg-white shadow">
+      <h2 className="text-sm text-neutral-500">{label}</h2>
+      <p className="text-2xl font-bold">{value}</p>
     </div>
   );
 }
@@ -217,13 +269,14 @@ function Modal({
             ✖
           </button>
         </div>
+
         {children}
       </div>
     </div>
   );
 }
 
-/* ---------------------- QR ---------------------- */
+/* ------ QR ------ */
 function ModalQR({
   base,
   forms,
@@ -235,39 +288,19 @@ function ModalQR({
 }) {
   const form = forms.find((f) => f.id === id);
   if (!form) return null;
+
   const frUrl = `${base}/f/${form.slug}?lang=fr`;
   const enUrl = `${base}/f/${form.slug}?lang=en`;
 
-  const qrFr = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(
-    frUrl
-  )}`;
-  const qrEn = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(
-    enUrl
-  )}`;
-
   return (
-    <div className="flex flex-col items-center gap-6">
-      <div className="flex gap-4">
-        <div className="text-center">
-          <img src={qrFr} alt="QR FR" className="border rounded-xl" />
-          <p className="text-xs mt-2">Formulaire Français</p>
-        </div>
-        <div className="text-center">
-          <img src={qrEn} alt="QR EN" className="border rounded-xl" />
-          <p className="text-xs mt-2">Formulaire Anglais</p>
-        </div>
-      </div>
-      <a href={frUrl} className="text-sm underline">
-        {frUrl}
-      </a>
-      <a href={enUrl} className="text-sm underline">
-        {enUrl}
-      </a>
+    <div className="space-y-3 text-sm">
+      <img src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${frUrl}`} />
+      <img src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${enUrl}`} />
     </div>
   );
 }
 
-/* ---------------------- LIENS ---------------------- */
+/* ------ Liens ------ */
 function ModalLinks({
   base,
   forms,
@@ -279,46 +312,26 @@ function ModalLinks({
 }) {
   const form = forms.find((f) => f.id === id);
   if (!form) return null;
+
   const frUrl = `${base}/f/${form.slug}?lang=fr`;
   const enUrl = `${base}/f/${form.slug}?lang=en`;
+
   return (
     <div className="space-y-3 text-sm">
-      <div>
-        <p>🇫🇷 Lien Français</p>
-        <input
-          readOnly
-          value={frUrl}
-          className="w-full border rounded-xl p-2"
-          onFocus={(e) => e.target.select()}
-        />
-      </div>
-      <div>
-        <p>🇬🇧 Lien Anglais</p>
-        <input
-          readOnly
-          value={enUrl}
-          className="w-full border rounded-xl p-2"
-          onFocus={(e) => e.target.select()}
-        />
-      </div>
+      <input readOnly value={frUrl} className="w-full border rounded-xl p-2" />
+      <input readOnly value={enUrl} className="w-full border rounded-xl p-2" />
     </div>
   );
 }
 
-/* ---------------------- EXPORT ---------------------- */
+/* ------ Export ------ */
 function ModalExport({ id }: { id: string }) {
   return (
     <div className="space-y-4">
-      <a
-        href={`/api/forms/${id}/export?lang=fr`}
-        className="block text-center px-4 py-2 bg-black text-white rounded-xl"
-      >
+      <a href={`/api/forms/${id}/export?lang=fr`} className="block text-center px-4 py-2 bg-black text-white rounded-xl">
         🇫🇷 Télécharger (FR)
       </a>
-      <a
-        href={`/api/forms/${id}/export?lang=en`}
-        className="block text-center px-4 py-2 border rounded-xl"
-      >
+      <a href={`/api/forms/${id}/export?lang=en`} className="block text-center px-4 py-2 border rounded-xl">
         🇬🇧 Download (EN)
       </a>
     </div>
