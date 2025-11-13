@@ -8,10 +8,10 @@ export const runtime = "nodejs";
 
 const prisma = new PrismaClient();
 
-// Le composant client doit accepter EXACTEMENT { form, serverLang }
+// Le composant client accepte { form, serverLang }
 const ClientPublicForm = nextDynamic<{ form: any; serverLang: "fr" | "en" }>(
   () => import("./page.client").then((mod) => mod.default),
-  { ssr: false } // ⚠️ très important : empêche le remount côté serveur
+  { ssr: false } // ⚠️ essentiel : empêche le remount serveur
 );
 
 export default async function PublicFormPage({
@@ -24,11 +24,12 @@ export default async function PublicFormPage({
   const form = await prisma.form.findUnique({ where: { slug: params.slug } });
   if (!form) return notFound();
 
-  const serverLang: "fr" | "en" = searchParams?.lang === "en" ? "en" : "fr";
+  const serverLang: "fr" | "en" =
+    searchParams?.lang === "en" ? "en" : "fr";
 
+  // On fige l’objet pour éviter toute mutation involontaire
   const frozenForm = JSON.parse(JSON.stringify(form));
 
-  // Mode debug (facultatif)
   if (searchParams?.debug === "1") {
     return (
       <pre style={{ padding: 16 }}>
@@ -49,6 +50,6 @@ export default async function PublicFormPage({
     );
   }
 
-  // Le composant client n’est jamais réinitialisé → saisie stable
+  // Le composant client reste MONTÉ → saisie stable
   return <ClientPublicForm form={frozenForm} serverLang={serverLang} />;
 }
