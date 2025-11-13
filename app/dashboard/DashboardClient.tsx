@@ -276,7 +276,7 @@ function Modal({
   );
 }
 
-/* ------ QR ------ */
+/* ---------------------- QR ---------------------- */
 function ModalQR({
   base,
   forms,
@@ -292,14 +292,81 @@ function ModalQR({
   const frUrl = `${base}/f/${form.slug}?lang=fr`;
   const enUrl = `${base}/f/${form.slug}?lang=en`;
 
+  // URLs QR haute résolution
+  const qrFr = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&data=${encodeURIComponent(
+    frUrl
+  )}`;
+  const qrEn = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&data=${encodeURIComponent(
+    enUrl
+  )}`;
+
+  // Fonction de téléchargement PNG
+  const downloadImage = async (url: string, filename: string) => {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+  };
+
   return (
-    <div className="space-y-3 text-sm">
-      <img src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${frUrl}`} />
-      <img src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${enUrl}`} />
+    <div className="flex flex-col items-center gap-8">
+
+      {/* QR alignés */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        {/* QR Français */}
+        <div className="flex flex-col items-center gap-3">
+          <img
+            src={qrFr}
+            alt="QR Français"
+            className="w-48 h-48 md:w-60 md:h-60 border rounded-xl shadow"
+          />
+          <p className="text-sm font-semibold">🇫🇷 Formulaire Français</p>
+
+          <button
+            onClick={() => downloadImage(qrFr, `${form.slug}-fr.png`)}
+            className="px-3 py-1.5 bg-black text-white text-sm rounded-xl hover:bg-neutral-800"
+          >
+            ⬇ Télécharger (PNG)
+          </button>
+        </div>
+
+        {/* QR Anglais */}
+        <div className="flex flex-col items-center gap-3">
+          <img
+            src={qrEn}
+            alt="QR English"
+            className="w-48 h-48 md:w-60 md:h-60 border rounded-xl shadow"
+          />
+          <p className="text-sm font-semibold">🇬🇧 English Form</p>
+
+          <button
+            onClick={() => downloadImage(qrEn, `${form.slug}-en.png`)}
+            className="px-3 py-1.5 border text-sm rounded-xl hover:bg-neutral-100"
+          >
+            ⬇ Download (PNG)
+          </button>
+        </div>
+
+      </div>
+
+      {/* Liens directs */}
+      <div className="text-center space-y-2 text-sm">
+        <p className="font-medium">Liens directs :</p>
+
+        <a className="underline block" href={frUrl} target="_blank">
+          {frUrl}
+        </a>
+
+        <a className="underline block" href={enUrl} target="_blank">
+          {enUrl}
+        </a>
+      </div>
     </div>
   );
 }
-
 /* ------ Liens ------ */
 function ModalLinks({
   base,
