@@ -21,13 +21,20 @@ const PatchBody = z.object({
 export async function PATCH(req: NextRequest, { params }: { params: { formId: string } }) {
   const body = PatchBody.parse(await req.json());
   const data: any = { ...body };
-  if (typeof body.sessionDate === "string") data.sessionDate = new Date(body.sessionDate);
-  const updated = await prisma.form.update({ where: { id: params.formId }, data });
+
+  if (body.sessionDate) data.sessionDate = new Date(body.sessionDate);
+
+  const updated = await prisma.form.update({
+    where: { id: params.formId },
+    data,
+  });
+
   return NextResponse.json({ form: updated });
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: { formId: string } }) {
   await prisma.response.deleteMany({ where: { formId: params.formId } });
   await prisma.form.delete({ where: { id: params.formId } });
+
   return NextResponse.json({ ok: true });
 }
