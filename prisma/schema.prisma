@@ -25,6 +25,8 @@ model Form {
   trainerName String
   sessionDate DateTime
   location    String
+  durationStart DateTime?
+  durationEnd   DateTime?
   slug        String     @unique
   isOpen      Boolean    @default(true)
   createdAt   DateTime   @default(now())
